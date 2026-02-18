@@ -26,7 +26,7 @@ impl Square {
             "Number of element in the x-direction should be greater than 0"
         );
         assert!(
-            nx > 0,
+            ny > 0,
             "Number of element in the y-direction should be greater than 0"
         );
         assert!(
@@ -49,31 +49,26 @@ impl Square {
     }
 
     fn get_numbering(&self, nlocdofx: usize, nlocdofy: usize) -> (Vec<Vec<usize>>, usize) {
-        assert!(false);
         let mut numbering: Vec<Vec<usize>> = vec![vec![]; self.get_nelements()];
-        let ndofx = (self.nx * nlocdofx - 1);
-        let nDoF = 0;
+
+        let px = nlocdofx - 1;
+        let py = nlocdofy - 1;
+        let n_dof_x = self.nx * px + 1;
+        let n_dof_y = self.ny * py + 1;
+        let n_dof = n_dof_x * n_dof_y;
 
         for ix in 0..self.nx {
             for iy in 0..self.ny {
-                for idofx in 0..nlocdofx {
-                    for idofy in 0..nlocdofy {
+                for idofy in 0..nlocdofy {
+                    for idofx in 0..nlocdofx {
                         numbering[iy * self.nx + ix]
-                            .push((iy * nlocdofy + iy) * ndofx + (ix * nlocdofx + iy));
+                            .push((iy * py + idofy) * n_dof_x + (ix * px + idofx));
                     }
                 }
             }
         }
 
-        // Index iEltGlobX = iEltGlob % _NX;
-        // Index iEltGlobY = iEltGlob / _NX;
-
-        // Index iLocX = iLoc % (_PX + 1);
-        // Index iLocY = iLoc / (_PX + 1);
-
-        // return (iEltGlobY * _PY + iLocY) * _NDoFX + (iEltGlobX * _PX + iLocX);
-
-        (numbering, nDoF)
+        (numbering, n_dof)
     }
 }
 
@@ -119,51 +114,43 @@ impl Mesh for Square {
                     (j + 1) * (self.nx + 1) + (i + 0),
                 ],
             }
+        } else if element_index < self.nx * self.ny + self.nx {
+            let i = element_index - self.nx * self.ny;
+
+            MeshElement {
+                geometric_element: &EDGE2,
+                label: 0,
+                indexes: vec![(i + 0), (i + 1)],
+            }
+        } else if element_index < self.nx * self.ny + self.nx + self.ny {
+            let j = element_index - (self.nx * self.ny + self.nx);
+
+            MeshElement {
+                geometric_element: &EDGE2,
+                label: 1,
+                indexes: vec![
+                    (j + 0) * (self.nx + 1) + self.nx,
+                    (j + 1) * (self.nx + 1) + self.nx,
+                ],
+            }
+        } else if element_index < self.nx * self.ny + 2 * self.nx + self.ny {
+            let i = (self.nx - 1) - (element_index - (self.nx * self.ny + self.nx + self.ny));
+
+            MeshElement {
+                geometric_element: &EDGE2,
+                label: 2,
+                indexes: vec![
+                    self.ny * (self.nx + 1) + (i + 1),
+                    self.ny * (self.nx + 1) + (i + 0),
+                ],
+            }
         } else {
-            if element_index < self.nx * self.ny + self.nx {
-                let i = element_index - self.nx * self.ny;
+            let j = (self.ny - 1) - (element_index - (self.nx * self.ny + 2 * self.nx + self.ny));
 
-                MeshElement {
-                    geometric_element: &EDGE2,
-                    label: 0,
-                    indexes: vec![(i + 0), (i + 1)],
-                }
-            } else {
-                if element_index < self.nx * self.ny + self.nx + self.ny {
-                    let j = element_index - (self.nx * self.ny + self.nx);
-
-                    MeshElement {
-                        geometric_element: &EDGE2,
-                        label: 1,
-                        indexes: vec![
-                            (j + 0) * (self.nx + 1) + self.nx,
-                            (j + 1) * (self.nx + 1) + self.nx,
-                        ],
-                    }
-                } else {
-                    if element_index < self.nx * self.ny + 2 * self.nx + self.ny {
-                        let i = (self.nx - 1)
-                            - (element_index - (self.nx * self.ny + self.nx + self.ny));
-
-                        MeshElement {
-                            geometric_element: &EDGE2,
-                            label: 2,
-                            indexes: vec![
-                                self.ny * (self.nx + 1) + (i + 1),
-                                self.ny * (self.nx + 1) + (i + 0),
-                            ],
-                        }
-                    } else {
-                        let j = (self.ny - 1)
-                            - (element_index - (self.nx * self.ny + 2 * self.nx + self.ny));
-
-                        MeshElement {
-                            geometric_element: &EDGE2,
-                            label: 3,
-                            indexes: vec![(j + 1) * (self.nx + 1), (j + 0) * (self.nx + 1)],
-                        }
-                    }
-                }
+            MeshElement {
+                geometric_element: &EDGE2,
+                label: 3,
+                indexes: vec![(j + 1) * (self.nx + 1), (j + 0) * (self.nx + 1)],
             }
         }
     }
@@ -173,11 +160,11 @@ impl Mesh for Square {
     fn get_topologic_dimension(&self) -> usize {
         2
     }
-    fn get_elements_by_dimension(&self, dim: usize) -> Vec<usize> {
+    fn get_elements_by_dimension(&self, _dim: usize) -> Vec<usize> {
         assert!(false);
         vec![0]
     }
-    fn get_elements_by_dimension_and_label(&self, label: usize, dim: usize) -> Vec<usize> {
+    fn get_elements_by_dimension_and_label(&self, _label: usize, _dim: usize) -> Vec<usize> {
         assert!(false);
         vec![0]
     }
@@ -201,8 +188,8 @@ impl Mesh for Square {
         color_index: usize,
         element_index_by_color: usize,
     ) -> usize {
-        let mut gex = 0;
-        let mut gey = 0;
+        let gex;
+        let gey;
 
         debug_assert!(
             element_index_by_color < self.get_nelements_by_color(color_index),
@@ -233,9 +220,9 @@ impl Mesh for Square {
 
         gey * self.nx + gex
     }
-    fn get_element_grad_def(&self, element_index: usize, uvw: &[f64], grad_def: &mut [f64]) {
+    fn get_element_grad_def(&self, _element_index: usize, _uvw: &[f64], grad_def: &mut [f64]) {
         let hx = self.lx / self.nx as f64;
-        let hy = self.lx / self.nx as f64;
+        let hy = self.ly / self.ny as f64;
 
         grad_def[0] *= hx;
         grad_def[1] *= hy;

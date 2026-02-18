@@ -1,6 +1,6 @@
 use std::f64::consts::SQRT_2;
-use std::f64::consts::SQRT_3;
-use std::usize;
+
+const SQRT_3: f64 = 1.7320508075688772;
 
 use crate::eq;
 use crate::leq;
@@ -50,19 +50,19 @@ pub const EDGE_VERTEXES: [[f64; 3]; 2] = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]];
 
 pub const EDGE_NORMALS: [[f64; 3]; 0] = [];
 
-///**********************************************************************
-/// Triangle
-///
-///    2                       o
-///    | \                     | \
-///    |   \                   |   \
-///    |     \                 2     1
-///    |       \               |       \                             y  
-///    |         \             |         \                           |
-///    0-----------1           o-----0-----o                         o--x
-///
-///
-///***********************************************************************
+/**********************************************************************
+* Triangle
+*
+*      2                       o
+*      | \                     | \
+*      |   \                   |   \
+*      |     \                 2     1
+*      |       \               |       \                             y
+*      |         \             |         \                           |
+*      0-----------1           o-----0-----o                         o--x
+*
+*
+***********************************************************************/
 
 pub const TRIANGLE_TOPOLOGY: [usize; 4] = [
     1, // Number of faces
@@ -463,7 +463,7 @@ impl ReferenceElement {
         let mut uvw_o = [uvw[0], uvw[1], uvw[2]];
 
         assert!(
-            e <= self.get_nedges(),
+            e < self.get_nedges(),
             "The index of the edge is larger than the number of edges"
         );
 
@@ -498,10 +498,8 @@ impl ReferenceElement {
     }
 
     pub fn uvw_face_transform(&self, uvw: &[f64], f: usize, o: usize) -> [f64; 3] {
-        let mut uvw_o = [0.0, 0.0, 0.0];
-
         assert!(
-            f <= self.get_nfaces(),
+            f < self.get_nfaces(),
             "The index of the face is larger than the number of faces"
         );
 
@@ -575,7 +573,7 @@ impl ReferenceElement {
             );
         }
 
-        uvw_o = [
+        let uvw_o = [
             origin[0] + l[0] * d1_o[0] + l[1] * d2_o[0],
             origin[1] + l[0] * d1_o[1] + l[1] * d2_o[1],
             origin[2] + l[0] * d1_o[2] + l[1] * d2_o[2],

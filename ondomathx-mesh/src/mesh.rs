@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use std::fs::File;
-use std::io::{self, BufRead, Write};
+use std::io::Write;
 
 pub mod square;
 pub mod unstructured_mesh;
@@ -121,8 +121,8 @@ pub trait Mesh {
 }
 
 impl MeshElement {
-    pub fn get_vertexes(&self) -> Vec<usize> {
-        return self.indexes.clone();
+    pub fn get_vertexes(&self) -> &[usize] {
+        &self.indexes
     }
 
     pub fn get_vertex(&self, k: usize) -> usize {

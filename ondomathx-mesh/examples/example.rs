@@ -4,7 +4,7 @@ use rouage::mesh::*;
 use unstructured_mesh::UnstructuredMesh;
 
 fn main() {
-    let mut mesh = UnstructuredMesh::new_from_msh("./assets/L.msh").unwrap();
+    let mesh = UnstructuredMesh::new_from_msh("./assets/L.msh").unwrap();
 
     println!("Point lists: {:?}\n", mesh.nodes);
 
@@ -45,11 +45,11 @@ fn main() {
 
     println!("dof set: {:?}\n", dof_set_q2);
 
-    let (num, N) = mesh.get_numbering(&dof_set_q1);
+    let (num, _n) = mesh.get_numbering(&dof_set_q1);
 
     println!("numbering: {:?}\n", num);
 
-    let (num, N) = mesh.get_numbering(&dof_set_q2);
+    let (num, _n) = mesh.get_numbering(&dof_set_q2);
 
     println!("numbering: {:?}\n", num);
 }

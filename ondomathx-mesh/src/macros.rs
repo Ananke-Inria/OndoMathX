@@ -59,7 +59,7 @@ macro_rules! vec_diff {
             $uvw_1[0] - $uvw_2[0],
             $uvw_1[1] - $uvw_2[1],
             $uvw_1[2] - $uvw_2[2],
-        ];
+        ]
     };
 }
 

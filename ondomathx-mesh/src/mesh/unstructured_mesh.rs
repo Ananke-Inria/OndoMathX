@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead};
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -40,25 +39,25 @@ pub struct UnstructuredMesh {
     pub neighbour_faces: Vec<Vec<usize>>,
 
     // For each face, the list of neighbour elements of highest dimension
-    // faces_neigbour[k][i][0] corresponds to the index of the ith element connected to the face k.
-    // faces_neigbour[k][i][1] corresponds to the index of the face in the element.
-    pub faces_neigbour: Vec<Vec<[usize; 2]>>,
+    // faces_neighbour[k][i][0] corresponds to the index of the ith element connected to the face k.
+    // faces_neighbour[k][i][1] corresponds to the index of the face in the element.
+    pub faces_neighbour: Vec<Vec<[usize; 2]>>,
 
     //For each element, list of the neighbour edges
     pub neighbour_edges: Vec<Vec<usize>>,
 
     // For each edge, the list of neighbour elements of highest dimension
-    // edges_neigbour[k][i][0] corresponds to the index of the ith element connected to the edge k.
-    // edges_neigbour[k][i][1] corresponds to the index of the edge in the element.
-    pub edges_neigbour: Vec<Vec<[usize; 2]>>,
+    // edges_neighbour[k][i][0] corresponds to the index of the ith element connected to the edge k.
+    // edges_neighbour[k][i][1] corresponds to the index of the edge in the element.
+    pub edges_neighbour: Vec<Vec<[usize; 2]>>,
 
     //For each element, list of the neighbour vertexes
     pub neighbour_vertexes: Vec<Vec<usize>>,
 
     // For each vertex , the list of neighbour elements of highest dimension
-    // vertexes_neigbour[k][i][0] corresponds to the index of the ith element connected to the vertex k.
-    // vertexes_neigbour[k][i][1] corresponds to the index of the vertex in the element.
-    pub vertexes_neigbour: Vec<Vec<[usize; 2]>>,
+    // vertexes_neighbour[k][i][0] corresponds to the index of the ith element connected to the vertex k.
+    // vertexes_neighbour[k][i][1] corresponds to the index of the vertex in the element.
+    pub vertexes_neighbour: Vec<Vec<[usize; 2]>>,
     //////////////////////////////////////////////////////////
 
     //Coloring
@@ -256,28 +255,18 @@ impl UnstructuredMesh {
 
             self.elements_by_dim[dim].push(el);
 
-            if self.elements_by_dim_and_label[dim].contains_key(&label) {
-                self.elements_by_dim_and_label[dim]
-                    .get_mut(&label)
-                    .unwrap()
-                    .push(el);
-            } else {
-                self.elements_by_dim_and_label[dim].insert(label, vec![el; 1]);
+            self.elements_by_dim_and_label[dim]
+                .entry(label)
+                .or_insert_with(Vec::new)
+                .push(el);
+        }
+
+        self.topologic_dimension = 0;
+        for d in (1..=3).rev() {
+            if !self.elements_by_dim[d].is_empty() {
+                self.topologic_dimension = d;
+                break;
             }
-        }
-
-        self.topologic_dimension = 3;
-
-        if self.elements_by_dim[3].len() == 0 {
-            self.topologic_dimension -= 1;
-        }
-
-        if self.elements_by_dim[2].len() == 0 {
-            self.topologic_dimension -= 1;
-        }
-
-        if self.elements_by_dim[1].len() == 0 {
-            self.topologic_dimension -= 1;
         }
     }
     fn compute_topology(&mut self) {
@@ -297,9 +286,9 @@ impl UnstructuredMesh {
                 let element = &self.elements[el];
                 let vertexes = element.get_vertexes();
 
-                for v in vertexes {
-                    //Number the vertex if it nas not been numbered yet
-                    if vertexes_inserted[v] == false {
+                for &v in vertexes {
+                    //Number the vertex if it has not been numbered yet
+                    if !vertexes_inserted[v] {
                         vertexes_index[v] = self.nvertexes;
                         self.nvertexes += 1;
                         vertexes_inserted[v] = true;
@@ -357,36 +346,36 @@ impl UnstructuredMesh {
             }
         }
 
-        //Construct the array vertexes_neigbour
+        //Construct the array vertexes_neighbour
         {
-            self.vertexes_neigbour.resize(self.nvertexes, Vec::new());
+            self.vertexes_neighbour.resize(self.nvertexes, Vec::new());
             for el in self.elements_by_dim[self.topologic_dimension].iter() {
                 let nv = self.neighbour_vertexes[*el].len();
                 for v in 0..nv {
-                    self.vertexes_neigbour[self.neighbour_vertexes[*el][v]].push([*el, v]);
+                    self.vertexes_neighbour[self.neighbour_vertexes[*el][v]].push([*el, v]);
                 }
             }
         }
 
-        //Construct the array edges_neigbour
+        //Construct the array edges_neighbour
         {
-            self.edges_neigbour.resize(self.nedges, Vec::new());
+            self.edges_neighbour.resize(self.nedges, Vec::new());
             for el in self.elements_by_dim[self.topologic_dimension].iter() {
                 let ne = self.neighbour_edges[*el].len();
                 for e in 0..ne {
-                    self.edges_neigbour[self.neighbour_edges[*el][e]].push([*el, e]);
+                    self.edges_neighbour[self.neighbour_edges[*el][e]].push([*el, e]);
                 }
             }
         }
 
-        //Construct the array faces_neigbour
+        //Construct the array faces_neighbour
         {
             if self.topologic_dimension == 3 {
-                self.faces_neigbour.resize(self.nfaces, Vec::new());
+                self.faces_neighbour.resize(self.nfaces, Vec::new());
                 for el in self.elements_by_dim[self.topologic_dimension].iter() {
                     let nf = self.neighbour_faces[*el].len();
                     for f in 0..nf {
-                        self.faces_neigbour[self.neighbour_faces[*el][f]].push([*el, f]);
+                        self.faces_neighbour[self.neighbour_faces[*el][f]].push([*el, f]);
                         // First the orientation index is set to 0
                     }
                 }
@@ -411,7 +400,7 @@ impl UnstructuredMesh {
             let ielement = self.elements_by_dim[self.topologic_dimension][i];
 
             for v in self.neighbour_vertexes[ielement].iter() {
-                for i_v_e in self.vertexes_neigbour[*v].iter() {
+                for i_v_e in self.vertexes_neighbour[*v].iter() {
                     if i_v_e[0] != ielement {
                         graph[i].push(element_2_higest_dim_element[i_v_e[0]]);
                     }
@@ -489,7 +478,103 @@ impl UnstructuredMesh {
 
         mesh
     }
+    pub fn new_from_mesh(path: &str) -> Result<UnstructuredMesh, std::io::Error> {
+        let points = UnstructuredMesh::read_points_from_mesh(path)?;
+        let elements = UnstructuredMesh::read_elements_from_mesh(path)?;
+
+        Ok(UnstructuredMesh::new_from_points_and_elements(
+            points, elements, None,
+        ))
+    }
+    fn read_points_from_mesh(path: &str) -> Result<Vec<[f64; 3]>, std::io::Error> {
+        let file = std::fs::File::open(path)?;
+        let file_buf = io::BufReader::new(file);
+        let mut vertices_lines = file_buf
+            .lines()
+            .map(|line_res| line_res.unwrap())
+            .skip_while(|line| line.trim() != "Vertices")
+            .skip(1);
+
+        let npnt = vertices_lines
+            .next()
+            .unwrap()
+            .trim()
+            .parse::<usize>()
+            .unwrap();
+        let mut points: Vec<[f64; 3]> = Vec::with_capacity(npnt);
+
+        for _ in 0..npnt {
+            let line = vertices_lines.next().unwrap();
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            points.push([
+                fields[0].parse::<f64>().unwrap(),
+                fields[1].parse::<f64>().unwrap(),
+                fields[2].parse::<f64>().unwrap(),
+            ]);
+        }
+
+        Ok(points)
+    }
+    fn read_elements_from_mesh(path: &str) -> Result<Vec<MeshElement>, std::io::Error> {
+        let file = std::fs::File::open(path)?;
+        let file_buf = io::BufReader::new(file);
+        let all_lines: Vec<String> = file_buf
+            .lines()
+            .map(|line_res| line_res.unwrap())
+            .collect();
+
+        let mut elements: Vec<MeshElement> = Vec::new();
+
+        let section_specs: &[(&str, &GeometricElement, usize)] = &[
+            ("Edges", &EDGE2, 2),
+            ("Triangles", &TRIANGLE3, 3),
+            ("Quadrilaterals", &QUADRANGLE4, 4),
+            ("Tetrahedra", &TETRAHEDRON4, 4),
+            ("Hexahedra", &HEXAHEDRON8, 8),
+        ];
+
+        for &(section_name, geo_element, nvertices) in section_specs {
+            if let Some(pos) = all_lines.iter().position(|l| l.trim() == section_name) {
+                let nelem = all_lines[pos + 1].trim().parse::<usize>().unwrap();
+
+                for k in 0..nelem {
+                    let line = &all_lines[pos + 2 + k];
+                    let fields: Vec<&str> = line.split_whitespace().collect();
+
+                    let indexes: Vec<usize> = (0..nvertices)
+                        .map(|i| fields[i].parse::<usize>().unwrap() - 1)
+                        .collect();
+
+                    let label = fields[nvertices].parse::<usize>().unwrap();
+
+                    elements.push(MeshElement {
+                        geometric_element: geo_element,
+                        label,
+                        indexes,
+                    });
+                }
+            }
+        }
+
+        Ok(elements)
+    }
     pub fn new_from_msh(path: &str) -> Result<UnstructuredMesh, std::io::Error> {
+        // Check that the file is in Gmsh format 2.2
+        let file = std::fs::File::open(path)?;
+        let file_buf = io::BufReader::new(file);
+        let mut lines = file_buf
+            .lines()
+            .map(|line_res| line_res.unwrap())
+            .skip_while(|line| line != "$MeshFormat")
+            .skip(1);
+        let version_line = lines.next().expect("Missing $MeshFormat section");
+        let version: &str = version_line.split(' ').next().unwrap();
+        assert!(
+            version == "2.2",
+            "Only Gmsh format 2.2 is supported, found {}",
+            version
+        );
+
         let points = UnstructuredMesh::read_points_from_msh(path)?;
 
         let elements = UnstructuredMesh::read_elements_from_msh(path)?;
@@ -542,6 +627,14 @@ impl UnstructuredMesh {
         for element_line in elements_lines {
             let split_element_line: Vec<&str> = element_line.split(' ').collect();
 
+            // Parse number of tags and extract label (physical group)
+            let ntags = split_element_line[2].parse::<usize>().unwrap();
+            let label = if ntags > 0 {
+                split_element_line[3].parse::<usize>().unwrap()
+            } else {
+                0
+            };
+
             match split_element_line[1] {
                 "1" => {
                     // Edge2
@@ -553,7 +646,22 @@ impl UnstructuredMesh {
 
                     elements.push(MeshElement {
                         geometric_element: &EDGE2,
-                        label: 0,
+                        label,
+                        indexes: point_indexes.to_vec(),
+                    })
+                }
+                "2" => {
+                    // Triangle3
+                    let line_len = split_element_line.len();
+                    let point_indexes = [
+                        split_element_line[line_len - 3].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 2].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 1].parse::<usize>().unwrap() - 1,
+                    ];
+
+                    elements.push(MeshElement {
+                        geometric_element: &TRIANGLE3,
+                        label,
                         indexes: point_indexes.to_vec(),
                     })
                 }
@@ -569,13 +677,49 @@ impl UnstructuredMesh {
 
                     elements.push(MeshElement {
                         geometric_element: &QUADRANGLE4,
-                        label: 0,
+                        label,
+                        indexes: point_indexes.to_vec(),
+                    })
+                }
+                "4" => {
+                    // Tetrahedron4
+                    let line_len = split_element_line.len();
+                    let point_indexes = [
+                        split_element_line[line_len - 4].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 3].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 2].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 1].parse::<usize>().unwrap() - 1,
+                    ];
+
+                    elements.push(MeshElement {
+                        geometric_element: &TETRAHEDRON4,
+                        label,
+                        indexes: point_indexes.to_vec(),
+                    })
+                }
+                "5" => {
+                    // Hexahedron8
+                    let line_len = split_element_line.len();
+                    let point_indexes = [
+                        split_element_line[line_len - 8].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 7].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 6].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 5].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 4].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 3].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 2].parse::<usize>().unwrap() - 1,
+                        split_element_line[line_len - 1].parse::<usize>().unwrap() - 1,
+                    ];
+
+                    elements.push(MeshElement {
+                        geometric_element: &HEXAHEDRON8,
+                        label,
                         indexes: point_indexes.to_vec(),
                     })
                 }
 
                 "15" => {}
-                _ => panic!("Element type not supported yet"),
+                _ => panic!("Element type {} not supported yet", split_element_line[1]),
             }
         }
 
@@ -701,10 +845,10 @@ impl UnstructuredMesh {
             for el in self.elements_by_dim[1].iter() {
                 let i_edge = self.neighbour_edges[*el][0];
 
-                assert!(self.edges_neigbour[i_edge].len()>0, "One edge can not be numbered since it is not connected with any numbered highest dimensionnal element");
+                assert!(self.edges_neighbour[i_edge].len()>0, "One edge can not be numbered since it is not connected with any numbered highest dimensionnal element");
 
-                let i_elem = self.edges_neigbour[i_edge][0][0];
-                let i_interface = self.edges_neigbour[i_edge][0][1];
+                let i_elem = self.edges_neighbour[i_edge][0][0];
+                let i_interface = self.edges_neighbour[i_edge][0][1];
 
                 let edge_elem = self.elements[i_elem].get_edge(i_interface);
                 let edge = self.elements[*el].get_edge(0);
@@ -724,10 +868,10 @@ impl UnstructuredMesh {
             for el in self.elements_by_dim[2].iter() {
                 let i_face = self.neighbour_faces[*el][0];
 
-                assert!(self.faces_neigbour[i_face].len()>0, "One face can not be numbered since it is not connected with any numbered 3D dimensionnal element");
+                assert!(self.faces_neighbour[i_face].len()>0, "One face can not be numbered since it is not connected with any numbered 3D dimensionnal element");
 
-                let i_elem = self.edges_neigbour[i_face][0][0];
-                let i_interface = self.edges_neigbour[i_face][0][1];
+                let i_elem = self.faces_neighbour[i_face][0][0];
+                let i_interface = self.faces_neighbour[i_face][0][1];
 
                 let face_elem = self.elements[i_elem].get_face(i_interface);
                 let face = self.elements[*el].get_face(0);

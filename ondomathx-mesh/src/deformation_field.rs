@@ -13,14 +13,14 @@ impl DeformationField {
             (self.diffeo)(xyz, f_xyz);
         } else {
             let inner_diffeo = self.inner_diffeo.as_ref().unwrap().as_ref();
-            let mut g_xyz = Vec::<f64>::with_capacity(self.inner_dim);
+            let mut g_xyz = vec![0.0; self.inner_dim];
 
-            (inner_diffeo.diffeo)(xyz, &mut g_xyz);
+            inner_diffeo.eval(xyz, &mut g_xyz);
             (self.diffeo)(&g_xyz, f_xyz);
         }
     }
 
-    pub fn compose(&mut self, deformation_field: DeformationField) {
-        panic!("Not yet implemented");
+    pub fn compose(&mut self, inner: DeformationField) {
+        self.inner_diffeo = Some(Box::new(inner));
     }
 }

@@ -205,7 +205,7 @@ impl DoFSet {
 
         for f in 0..reference_element.get_nfaces() {
             assert!(
-                dof_strictly_in_faces[f].len() == dof_strictly_in_faces[f].len(),
+                dof_strictly_in_faces[f].len() == dof_strictly_in_faces[0].len(),
                 "Symmetry problem in the d.o.f list"
             );
         }

@@ -44,6 +44,20 @@ const TRIANGLE_3_SHAPE_FUNCTION_D_VALUE: [fn(uvw: &[f64]) -> [f64; 3]; 3] = [
     |_uvw| return [0.0, 1.0, 0.0],
 ];
 
+const TETRAHEDRON_4_SHAPE_FUNCTION_VALUE: [fn(&[f64]) -> f64; 4] = [
+    |uvw| 1.0 - uvw[0] - uvw[1] - uvw[2],
+    |uvw| uvw[0],
+    |uvw| uvw[1],
+    |uvw| uvw[2],
+];
+
+const TETRAHEDRON_4_SHAPE_FUNCTION_D_VALUE: [fn(&[f64]) -> [f64; 3]; 4] = [
+    |_uvw| [-1.0, -1.0, -1.0],
+    |_uvw| [1.0, 0.0, 0.0],
+    |_uvw| [0.0, 1.0, 0.0],
+    |_uvw| [0.0, 0.0, 1.0],
+];
+
 const QUADRANGLE_4_SHAPE_FUNCTION_VALUE: [fn(uvw: &[f64]) -> f64; 4] = [
     |uvw| return (1.0 - uvw[0]) * (1.0 - uvw[1]),
     |uvw| return uvw[0] * (1.0 - uvw[1]),
@@ -67,7 +81,7 @@ const QUADRANGLE_9_SHAPE_FUNCTION_VALUE: [fn(uvw: &[f64]) -> f64; 9] = [
     |uvw| return P2[1](uvw[0]) * P2[2](uvw[1]),
     |uvw| return P2[2](uvw[0]) * P2[1](uvw[1]),
     |uvw| return P2[0](uvw[0]) * P2[2](uvw[1]),
-    |uvw| return P2[0](uvw[2]) * P2[2](uvw[1]),
+    |uvw| return P2[2](uvw[0]) * P2[2](uvw[1]),
 ];
 
 const QUADRANGLE_9_SHAPE_FUNCTION_D_VALUE: [fn(uvw: &[f64]) -> [f64; 3]; 9] = [
@@ -129,8 +143,8 @@ const QUADRANGLE_9_SHAPE_FUNCTION_D_VALUE: [fn(uvw: &[f64]) -> [f64; 3]; 9] = [
     },
     |uvw| {
         return [
-            DP2[0](uvw[2]) * P2[2](uvw[1]),
-            P2[0](uvw[2]) * DP2[2](uvw[1]),
+            DP2[2](uvw[0]) * P2[2](uvw[1]),
+            P2[2](uvw[0]) * DP2[2](uvw[1]),
             0.0,
         ];
     },
@@ -183,4 +197,42 @@ pub const QUADRANGLE9: GeometricElement = GeometricElement {
     shape_functions: &QUADRANGLE_9_SHAPE_FUNCTION_VALUE,
     d_shape_functions: &QUADRANGLE_9_SHAPE_FUNCTION_D_VALUE,
     msh_id: 10,
+};
+
+pub const TETRAHEDRON4: GeometricElement = GeometricElement {
+    reference_element: &TETRAHEDRON,
+    nshape_functions: 4,
+    shape_functions: &TETRAHEDRON_4_SHAPE_FUNCTION_VALUE,
+    d_shape_functions: &TETRAHEDRON_4_SHAPE_FUNCTION_D_VALUE,
+    msh_id: 4,
+};
+
+const HEXAHEDRON_8_SHAPE_FUNCTION_VALUE: [fn(&[f64]) -> f64; 8] = [
+    |uvw| (1.0 - uvw[0]) * (1.0 - uvw[1]) * (1.0 - uvw[2]),
+    |uvw| uvw[0] * (1.0 - uvw[1]) * (1.0 - uvw[2]),
+    |uvw| uvw[0] * uvw[1] * (1.0 - uvw[2]),
+    |uvw| (1.0 - uvw[0]) * uvw[1] * (1.0 - uvw[2]),
+    |uvw| (1.0 - uvw[0]) * (1.0 - uvw[1]) * uvw[2],
+    |uvw| uvw[0] * (1.0 - uvw[1]) * uvw[2],
+    |uvw| uvw[0] * uvw[1] * uvw[2],
+    |uvw| (1.0 - uvw[0]) * uvw[1] * uvw[2],
+];
+
+const HEXAHEDRON_8_SHAPE_FUNCTION_D_VALUE: [fn(&[f64]) -> [f64; 3]; 8] = [
+    |uvw| [-(1.0 - uvw[1]) * (1.0 - uvw[2]), -(1.0 - uvw[0]) * (1.0 - uvw[2]), -(1.0 - uvw[0]) * (1.0 - uvw[1])],
+    |uvw| [(1.0 - uvw[1]) * (1.0 - uvw[2]), -uvw[0] * (1.0 - uvw[2]), -uvw[0] * (1.0 - uvw[1])],
+    |uvw| [uvw[1] * (1.0 - uvw[2]), uvw[0] * (1.0 - uvw[2]), -uvw[0] * uvw[1]],
+    |uvw| [-uvw[1] * (1.0 - uvw[2]), (1.0 - uvw[0]) * (1.0 - uvw[2]), -(1.0 - uvw[0]) * uvw[1]],
+    |uvw| [-(1.0 - uvw[1]) * uvw[2], -(1.0 - uvw[0]) * uvw[2], (1.0 - uvw[0]) * (1.0 - uvw[1])],
+    |uvw| [(1.0 - uvw[1]) * uvw[2], -uvw[0] * uvw[2], uvw[0] * (1.0 - uvw[1])],
+    |uvw| [uvw[1] * uvw[2], uvw[0] * uvw[2], uvw[0] * uvw[1]],
+    |uvw| [-uvw[1] * uvw[2], (1.0 - uvw[0]) * uvw[2], (1.0 - uvw[0]) * uvw[1]],
+];
+
+pub const HEXAHEDRON8: GeometricElement = GeometricElement {
+    reference_element: &HEXAHEDRON,
+    nshape_functions: 8,
+    shape_functions: &HEXAHEDRON_8_SHAPE_FUNCTION_VALUE,
+    d_shape_functions: &HEXAHEDRON_8_SHAPE_FUNCTION_D_VALUE,
+    msh_id: 5,
 };
