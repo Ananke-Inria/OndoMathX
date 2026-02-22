@@ -1,0 +1,44 @@
+[package]
+name = "tetrix"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "TetriX"
+path = "src/main.rs"
+
+[[bin]]
+name = "gen_mat_10_4"
+path = "src/bin/gen_mat_10_4.rs"
+
+[[bin]]
+name = "gen_mat_15_14"
+path = "src/bin/gen_mat_15_14.rs"
+
+[dependencies]
+rouage = { path = "../Rouage" }
+nalgebra = "0.33"
+
+[[bench]]
+name = "tet_15_14"
+harness = false
+
+[[bench]]
+name = "tet_15"
+harness = false
+
+[[bench]]
+name = "tet_10"
+harness = false
+
+[[bench]]
+name = "tet_10_4"
+harness = false
+
+[[bench]]
+name = "tet_15_10b"
+harness = false
+
+[dev-dependencies]
+criterion = { version = "0.8.2", features = ["html_reports"] }
+nalgebra = "0.33"
