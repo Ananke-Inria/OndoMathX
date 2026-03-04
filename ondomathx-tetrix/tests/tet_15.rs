@@ -1,6 +1,7 @@
 use nalgebra::Matrix3;
 use tetrix::finite_element::tet_15::{
-    build_local_stiffness, d_shape_function, mlt_stiffness, shape_function, POINTS, WEIGHTS,
+    build_local_stiffness, d_shape_function, mlt_stiffness, mlt_stiffness_opt, shape_function,
+    POINTS, WEIGHTS,
 };
 
 const TOL: f64 = 1e-12;
@@ -50,11 +51,7 @@ fn test_partition_of_unity() {
 // ---------------------------------------------------------------------------
 #[test]
 fn test_gradient_sum_is_zero() {
-    let pts: [[f64; 3]; 3] = [
-        [0.1, 0.2, 0.3],
-        [0.25, 0.25, 0.25],
-        [0.15, 0.1, 0.05],
-    ];
+    let pts: [[f64; 3]; 3] = [[0.1, 0.2, 0.3], [0.25, 0.25, 0.25], [0.15, 0.1, 0.05]];
     for pt in &pts {
         for d in 0..3 {
             let sum: f64 = (0..15).map(|i| d_shape_function(i, d, pt)).sum();
@@ -79,9 +76,7 @@ fn test_p1_reproduction() {
     ];
     for pt in &pts {
         for d in 0..3 {
-            let interp: f64 = (0..15)
-                .map(|i| shape_function(i, pt) * POINTS[i][d])
-                .sum();
+            let interp: f64 = (0..15).map(|i| shape_function(i, pt) * POINTS[i][d]).sum();
             assert!(
                 (interp - pt[d]).abs() < TOL,
                 "P1 reproduction coord {d} at {pt:?}: got {interp:.6e}, expected {:.6e}",
@@ -96,11 +91,7 @@ fn test_p1_reproduction() {
 // ---------------------------------------------------------------------------
 #[test]
 fn test_p2_reproduction() {
-    let pts: [[f64; 3]; 3] = [
-        [0.1, 0.2, 0.3],
-        [0.25, 0.25, 0.25],
-        [0.15, 0.1, 0.4],
-    ];
+    let pts: [[f64; 3]; 3] = [[0.1, 0.2, 0.3], [0.25, 0.25, 0.25], [0.15, 0.1, 0.4]];
     let monomials: &[(&str, fn(f64, f64, f64) -> f64)] = &[
         ("u²", |u, _v, _w| u * u),
         ("v²", |_u, v, _w| v * v),
@@ -158,7 +149,7 @@ fn test_gradients_vs_finite_differences() {
 //    verified for all monomials up to total degree 3 and degree-4 bubble monomials
 // ---------------------------------------------------------------------------
 #[test]
-fn test_quadrature_exactness_degree_3() {
+fn test_quadrature_exactness_degree_3_and_degree_4_bubbles() {
     fn factorial(n: u32) -> f64 {
         (1..=n).fold(1.0, |acc, k| acc * k as f64)
     }
@@ -177,32 +168,102 @@ fn test_quadrature_exactness_degree_3() {
     }
 
     // degree 0
-    assert!((quad(0,0,0) - exact_tet_integral(0,0,0)).abs() < TOL, "exact for 1");
+    assert!(
+        (quad(0, 0, 0) - exact_tet_integral(0, 0, 0)).abs() < TOL,
+        "exact for 1"
+    );
     // degree 1
-    assert!((quad(1,0,0) - exact_tet_integral(1,0,0)).abs() < TOL, "exact for u");
-    assert!((quad(0,1,0) - exact_tet_integral(0,1,0)).abs() < TOL, "exact for v");
-    assert!((quad(0,0,1) - exact_tet_integral(0,0,1)).abs() < TOL, "exact for w");
+    assert!(
+        (quad(1, 0, 0) - exact_tet_integral(1, 0, 0)).abs() < TOL,
+        "exact for u"
+    );
+    assert!(
+        (quad(0, 1, 0) - exact_tet_integral(0, 1, 0)).abs() < TOL,
+        "exact for v"
+    );
+    assert!(
+        (quad(0, 0, 1) - exact_tet_integral(0, 0, 1)).abs() < TOL,
+        "exact for w"
+    );
     // degree 2
-    assert!((quad(2,0,0) - exact_tet_integral(2,0,0)).abs() < TOL, "exact for u²");
-    assert!((quad(1,1,0) - exact_tet_integral(1,1,0)).abs() < TOL, "exact for uv");
-    assert!((quad(1,0,1) - exact_tet_integral(1,0,1)).abs() < TOL, "exact for uw");
-    assert!((quad(0,2,0) - exact_tet_integral(0,2,0)).abs() < TOL, "exact for v²");
-    assert!((quad(0,1,1) - exact_tet_integral(0,1,1)).abs() < TOL, "exact for vw");
-    assert!((quad(0,0,2) - exact_tet_integral(0,0,2)).abs() < TOL, "exact for w²");
+    assert!(
+        (quad(2, 0, 0) - exact_tet_integral(2, 0, 0)).abs() < TOL,
+        "exact for u²"
+    );
+    assert!(
+        (quad(1, 1, 0) - exact_tet_integral(1, 1, 0)).abs() < TOL,
+        "exact for uv"
+    );
+    assert!(
+        (quad(1, 0, 1) - exact_tet_integral(1, 0, 1)).abs() < TOL,
+        "exact for uw"
+    );
+    assert!(
+        (quad(0, 2, 0) - exact_tet_integral(0, 2, 0)).abs() < TOL,
+        "exact for v²"
+    );
+    assert!(
+        (quad(0, 1, 1) - exact_tet_integral(0, 1, 1)).abs() < TOL,
+        "exact for vw"
+    );
+    assert!(
+        (quad(0, 0, 2) - exact_tet_integral(0, 0, 2)).abs() < TOL,
+        "exact for w²"
+    );
     // degree 3
-    assert!((quad(3,0,0) - exact_tet_integral(3,0,0)).abs() < TOL, "exact for u³");
-    assert!((quad(2,1,0) - exact_tet_integral(2,1,0)).abs() < TOL, "exact for u²v");
-    assert!((quad(2,0,1) - exact_tet_integral(2,0,1)).abs() < TOL, "exact for u²w");
-    assert!((quad(1,2,0) - exact_tet_integral(1,2,0)).abs() < TOL, "exact for uv²");
-    assert!((quad(1,1,1) - exact_tet_integral(1,1,1)).abs() < TOL, "exact for uvw");
-    assert!((quad(1,0,2) - exact_tet_integral(1,0,2)).abs() < TOL, "exact for uw²");
-    assert!((quad(0,3,0) - exact_tet_integral(0,3,0)).abs() < TOL, "exact for v³");
-    assert!((quad(0,2,1) - exact_tet_integral(0,2,1)).abs() < TOL, "exact for v²w");
-    assert!((quad(0,1,2) - exact_tet_integral(0,1,2)).abs() < TOL, "exact for vw²");
-    assert!((quad(0,0,3) - exact_tet_integral(0,0,3)).abs() < TOL, "exact for w³");
-    assert!((quad(2,1,1) - exact_tet_integral(2,1,1)).abs() < TOL, "exact for u²vw");
-    assert!((quad(1,2,1) - exact_tet_integral(1,2,1)).abs() < TOL, "exact for uv²w");
-    assert!((quad(1,1,2) - exact_tet_integral(1,1,2)).abs() < TOL, "exact for uvw²");
+    assert!(
+        (quad(3, 0, 0) - exact_tet_integral(3, 0, 0)).abs() < TOL,
+        "exact for u³"
+    );
+    assert!(
+        (quad(2, 1, 0) - exact_tet_integral(2, 1, 0)).abs() < TOL,
+        "exact for u²v"
+    );
+    assert!(
+        (quad(2, 0, 1) - exact_tet_integral(2, 0, 1)).abs() < TOL,
+        "exact for u²w"
+    );
+    assert!(
+        (quad(1, 2, 0) - exact_tet_integral(1, 2, 0)).abs() < TOL,
+        "exact for uv²"
+    );
+    assert!(
+        (quad(1, 1, 1) - exact_tet_integral(1, 1, 1)).abs() < TOL,
+        "exact for uvw"
+    );
+    assert!(
+        (quad(1, 0, 2) - exact_tet_integral(1, 0, 2)).abs() < TOL,
+        "exact for uw²"
+    );
+    assert!(
+        (quad(0, 3, 0) - exact_tet_integral(0, 3, 0)).abs() < TOL,
+        "exact for v³"
+    );
+    assert!(
+        (quad(0, 2, 1) - exact_tet_integral(0, 2, 1)).abs() < TOL,
+        "exact for v²w"
+    );
+    assert!(
+        (quad(0, 1, 2) - exact_tet_integral(0, 1, 2)).abs() < TOL,
+        "exact for vw²"
+    );
+    assert!(
+        (quad(0, 0, 3) - exact_tet_integral(0, 0, 3)).abs() < TOL,
+        "exact for w³"
+    );
+    // degree 4
+    assert!(
+        (quad(2, 1, 1) - exact_tet_integral(2, 1, 1)).abs() < TOL,
+        "exact for u²vw"
+    );
+    assert!(
+        (quad(1, 2, 1) - exact_tet_integral(1, 2, 1)).abs() < TOL,
+        "exact for uv²w"
+    );
+    assert!(
+        (quad(1, 1, 2) - exact_tet_integral(1, 1, 2)).abs() < TOL,
+        "exact for uvw²"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,8 +273,29 @@ fn test_matrix() -> Matrix3<f64> {
     Matrix3::new(2.0, 0.5, 0.1, 0.5, 3.0, 0.2, 0.1, 0.2, 1.5)
 }
 
+fn random_spd_matrices(n: usize) -> Vec<Matrix3<f64>> {
+    let mut state: u64 = 0x123456789abcdef0;
+    let mut next = || -> f64 {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((state >> 11) as f64) * (2.0 / (1u64 << 53) as f64) - 1.0
+    };
+    (0..n)
+        .map(|_| {
+            let (l00, l11, l22) = (next().abs() + 0.5, next().abs() + 0.5, next().abs() + 0.5);
+            let (l10, l20, l21) = (next(), next(), next());
+            let l = Matrix3::new(l00, 0.0, 0.0, l10, l11, 0.0, l20, l21, l22);
+            l * l.transpose()
+        })
+        .collect()
+}
+
 const TOL_K: f64 = 1e-10;
 
+// ---------------------------------------------------------------------------
+// 9. check the underlying local stiffness matrix when using mlt_stiffness
+// ---------------------------------------------------------------------------
 #[test]
 fn test_mlt_stiffness_basis_vectors() {
     let sym_grad = test_matrix();
@@ -242,7 +324,7 @@ fn test_mlt_stiffness_basis_vectors() {
 }
 
 // ---------------------------------------------------------------------------
-// 9. Symmetry — K must be symmetric (K[i,j] == K[j,i])
+// 10. Symmetry — K must be symmetric (K[i,j] == K[j,i])
 // ---------------------------------------------------------------------------
 #[test]
 fn test_stiffness_symmetry() {
@@ -258,6 +340,83 @@ fn test_stiffness_symmetry() {
                 k[(i, j)],
                 k[(j, i)],
                 diff
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 11. mlt_stiffness_opt: the operator is symmetric  (50 random SPD matrices)
+// ---------------------------------------------------------------------------
+#[test]
+fn test_stiffness_opt_symmetry() {
+    let mut input = [0.0_f64; 15];
+    let mut col = [0.0_f64; 15];
+    let mut k_opt = [[0.0_f64; 15]; 15];
+
+    for (m, sym_grad) in random_spd_matrices(50).iter().enumerate() {
+        for j in 0..15 {
+            input.fill(0.0);
+            input[j] = 1.0;
+            mlt_stiffness_opt(&input, sym_grad, &mut col);
+            for i in 0..15 {
+                k_opt[i][j] = col[i];
+            }
+        }
+
+        for i in 0..15 {
+            for j in 0..15 {
+                let diff = (k_opt[i][j] - k_opt[j][i]).abs();
+                assert!(
+                    diff < TOL_K,
+                    "matrix {m}: K_opt not symmetric: [{i},{j}]={:.12e}, [{j},{i}]={:.12e}, Δ={:.2e}",
+                    k_opt[i][j],
+                    k_opt[j][i],
+                    diff
+                );
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 12. mlt_stiffness_opt matrix is positive semi-definite  (50 random SPD matrices)
+// ---------------------------------------------------------------------------
+#[test]
+fn test_stiffness_opt_positive_semidefinite() {
+    let mut input = [0.0_f64; 15];
+    let mut col = [0.0_f64; 15];
+    let mut k_opt = nalgebra::SMatrix::<f64, 15, 15>::zeros();
+
+    let tol = 1e-10;
+
+    for (m, sym_grad) in random_spd_matrices(50).iter().enumerate() {
+        for j in 0..15 {
+            input.fill(0.0);
+            input[j] = 1.0;
+            mlt_stiffness_opt(&input, sym_grad, &mut col);
+            for i in 0..15 {
+                k_opt[(i, j)] = col[i];
+            }
+        }
+
+        let k_sym = (k_opt + k_opt.transpose()) * 0.5;
+        let eigen = k_sym.symmetric_eigen();
+        let mut eigenvalues: Vec<f64> = eigen.eigenvalues.as_slice().to_vec();
+        eigenvalues.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        assert!(
+            eigenvalues[0].abs() < tol,
+            "matrix {m}: λ_min = {:.6e}: expected ≈ 0 (null space of constants)",
+            eigenvalues[0]
+        );
+
+        for (i, &ev) in eigenvalues[1..].iter().enumerate() {
+            assert!(
+                ev > 0.0,
+                "matrix {m}: eigenvalue[{}] = {:.6e}: expected > 0",
+                i + 1,
+                ev
             );
         }
     }

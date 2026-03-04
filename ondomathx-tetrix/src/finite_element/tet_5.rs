@@ -22,7 +22,6 @@
 ///
 /// Note: w_c is negative.  This is unavoidable for this node placement.
 /// Degree of precision: 2.
-/// Weights sum to 1/6 (volume of the reference tetrahedron).
 
 pub const W_FACE: f64 = 3.0 / 40.0;
 pub const W_INTERIOR: f64 = -2.0 / 15.0;

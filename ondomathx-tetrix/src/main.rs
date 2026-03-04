@@ -1,6 +1,6 @@
 use tetrix::io_vizir;
 use tetrix::io_vtk;
-use tetrix::lal::{self, Vector};
+use tetrix::lal;
 use tetrix::tetrix_p2_space::TetriXP2Space;
 
 use rouage::mesh::{Mesh, UnstructuredMesh};
@@ -62,21 +62,21 @@ fn main() {
     // -----------------------------------------------------------------------
     // Diagonal mass matrix (assembled in CG, size n_dof)
     // -----------------------------------------------------------------------
-    let mut mass = lal::new_diagonal_matrix(n_dof);
+    let mut mass = vec![0.0_f64; n_dof];
     fe_space.assemble_mass(&mut mass, 1.0);
 
     // -----------------------------------------------------------------------
     // Source: Gaussian centred at (20, 70, 70) in CG, then scattered to DG
     // -----------------------------------------------------------------------
-    let mut source_cg: Vector = lal::new_vector(n_dof);
+    let mut source_cg: Vec<f64> = vec![0.0_f64; n_dof];
     for i in 0..n_dof {
         let xyz = fe_space.dof_coordinate(i);
         let r =
             ((xyz[0] - 20.0).powi(2) + (xyz[1] - 70.0).powi(2) + (xyz[2] - 70.0).powi(2)).sqrt();
         source_cg[i] = gaussian(r, 100.0);
     }
-    let mut source_dg: Vector = lal::new_vector(n_dg);
-    fe_space.scatter_dg(&source_cg, &mut source_dg);
+    let mut source_dg: Vec<f64> = vec![0.0_f64; n_dg];
+    fe_space.scatter_cg(&source_cg, &mut source_dg);
 
     let source_norm = lal::mass_norm(&source_cg, &mass);
 
@@ -100,16 +100,11 @@ fn main() {
 
     let (rho, pi_iters, pi_res) = lal::power_iteration(
         // Solve: M⁻¹ in-place on a DG vector
-        |v: &mut Vector| {
-            let mut tmp_cg = vec![0.0_f64; n_dof];
-            fe_space.collect_dg(v, &mut tmp_cg); // DG → CG (assembly)
-            for i in 0..n_dof {
-                tmp_cg[i] /= mass[i];
-            } // diagonal solve
-            fe_space.scatter_dg(&tmp_cg, v); // CG → DG
+        |v: &mut Vec<f64>| {
+            fe_space.mlt_inverse_mass(v, &mass);
         },
         // MltAdd: K on a DG vector
-        |u: &Vector, v: &mut Vector| {
+        |u: &Vec<f64>, v: &mut Vec<f64>| {
             fe_space.mlt_stiffness_dg(u, v, 1.0);
         },
         n_dg,
@@ -149,7 +144,6 @@ fn main() {
     let mut u_prev = vec![0.0_f64; n_dg]; // u_{n-1}, initialised to zero
     let mut u_curr = vec![0.0_f64; n_dg]; // u_n,     initialised to zero
     let mut ku_dg = vec![0.0_f64; n_dg]; // M⁻¹ K u_n  (DG)
-    let mut tmp_cg = vec![0.0_f64; n_dof];
 
     let mut n_out = 0_usize;
     let tloop = Instant::now();
@@ -162,11 +156,7 @@ fn main() {
         fe_space.mlt_stiffness_dg(&u_curr, &mut ku_dg, 1.0);
 
         // 2. M⁻¹: collect DG→CG, divide by diagonal mass, scatter CG→DG
-        fe_space.collect_dg(&ku_dg, &mut tmp_cg);
-        for i in 0..n_dof {
-            tmp_cg[i] /= mass[i];
-        }
-        fe_space.scatter_dg(&tmp_cg, &mut ku_dg);
+        fe_space.mlt_inverse_mass(&mut ku_dg, &mass);
 
         // 3. u_next = 2 u_n − u_{n-1} − dt² M⁻¹K u_n + dt² R(t) src
         //    Written into u_prev (no longer needed as u_{n-1}).
@@ -193,7 +183,7 @@ fn main() {
                 i_step,
                 t,
                 u_norm,
-                rk * source_norm,
+                rk.abs() * source_norm,
                 path
             );
             n_out += 1;

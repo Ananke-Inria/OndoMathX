@@ -85,9 +85,18 @@ fn bench_15_to_10b(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("tet_15_to_tet_10b  (15→15)");
 
-    group.bench_function("precomputed BUBBLE_MAT", |b| {
+    group.bench_function("tet_15_to_tet_10b (P)", |b| {
         b.iter(|| {
             tet_15_10b::tet_15_to_tet_10b(
+                std::hint::black_box(&a_arr),
+                std::hint::black_box(&mut b_arr),
+            )
+        })
+    });
+
+    group.bench_function("tet_15_to_tet_10b_transpose (P^T)", |b| {
+        b.iter(|| {
+            tet_15_10b::tet_15_to_tet_10b_transpose(
                 std::hint::black_box(&a_arr),
                 std::hint::black_box(&mut b_arr),
             )

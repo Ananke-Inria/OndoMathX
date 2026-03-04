@@ -1,7 +1,9 @@
 use nalgebra::{Matrix3, SVector};
 use tetrix::finite_element::tet_10b;
 use tetrix::finite_element::tet_15;
-use tetrix::finite_element::tet_15_10b::{tet_10b_to_tet_15, tet_15_to_tet_10b};
+use tetrix::finite_element::tet_15_10b::{
+    tet_10b_to_tet_15, tet_15_to_tet_10b, tet_15_to_tet_10b_transpose,
+};
 
 const TOL: f64 = 1e-12;
 
@@ -167,7 +169,32 @@ fn test_energy_preservation() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. tet_15 basis vector e_i: tet_15_to_tet_10b(e_i) gives the i-th column
+// 6. tet_15_to_tet_10b_transpose is the adjoint of tet_15_to_tet_10b:
+//    <P u, c> = <u, P^T c>  for all u, c
+// ---------------------------------------------------------------------------
+#[test]
+fn test_tet_15_to_tet_10b_transpose_adjoint() {
+    let u = test_coeffs_15();
+    let c = test_coeffs_10b();
+
+    let mut pu = [0.0f64; 15];
+    tet_15_to_tet_10b(&u, &mut pu);
+
+    let mut pt_c = [0.0f64; 15];
+    tet_15_to_tet_10b_transpose(&c, &mut pt_c);
+
+    let lhs: f64 = pu.iter().zip(c.iter()).map(|(x, y)| x * y).sum();
+    let rhs: f64 = u.iter().zip(pt_c.iter()).map(|(x, y)| x * y).sum();
+
+    assert!(
+        (lhs - rhs).abs() < TOL,
+        "<P u, c> = {lhs:.15e}  ≠  <u, P^T c> = {rhs:.15e},  Δ = {:.2e}",
+        (lhs - rhs).abs()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 7. tet_15 basis vector e_i: tet_15_to_tet_10b(e_i) gives the i-th column
 //    of the inverse change-of-basis matrix; converting back must recover e_i
 // ---------------------------------------------------------------------------
 #[test]

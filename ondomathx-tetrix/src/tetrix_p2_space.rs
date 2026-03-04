@@ -3,7 +3,6 @@ use rayon::prelude::*;
 use rouage::mesh::{DoFSet, Mesh, UnstructuredMesh, TETRAHEDRON};
 
 use crate::finite_element::{tet_14, tet_15, tet_15_14};
-use crate::lal::{DiagonalMatrix, Vector};
 
 pub const DIM: usize = 3;
 pub const ORDER: usize = 2;
@@ -274,7 +273,7 @@ impl<'a> TetriXP2Space<'a> {
     // Assembly
     // -----------------------------------------------------------------------
 
-    pub fn assemble_mass(&self, mass: &mut DiagonalMatrix, alpha: f64) {
+    pub fn assemble_mass(&self, mass: &mut Vec<f64>, alpha: f64) {
         for i_elt in 0..self.n_elem {
             let j = self.jacobian_origin[i_elt];
             for i_loc in 0..N_LOC_DOF {
@@ -285,7 +284,7 @@ impl<'a> TetriXP2Space<'a> {
         }
     }
 
-    pub fn mlt_stiffness(&self, u: &Vector, v: &mut Vector, alpha: f64) {
+    pub fn mlt_stiffness(&self, u: &Vec<f64>, v: &mut Vec<f64>, alpha: f64) {
         for x in v.iter_mut() {
             *x = 0.0;
         }
@@ -333,13 +332,13 @@ impl<'a> TetriXP2Space<'a> {
 
     /// Sequential version of `mlt_stiffness_dg` (no Rayon), useful for
     /// profiling or single-threaded benchmarking.
-    pub fn mlt_stiffness_dg_seq(&self, u: &Vector, v: &mut Vector, alpha: f64) {
+    pub fn mlt_stiffness_dg_seq(&self, u: &Vec<f64>, v: &mut Vec<f64>, alpha: f64) {
         for el in 0..self.n_elem {
             let offset = el * N_LOC_DOF;
             let buf_u: &[f64; N_LOC_DOF] = u[offset..offset + N_LOC_DOF].try_into().unwrap();
             let mut buf_v = [0.0f64; N_LOC_DOF];
 
-            tet_15::mlt_stiffness(buf_u, &self.sym_grad_def_origin[el], &mut buf_v);
+            tet_15::mlt_stiffness_opt(buf_u, &self.sym_grad_def_origin[el], &mut buf_v);
 
             for i_loc in 0..N_LOC_DOF {
                 v[offset + i_loc] = alpha * buf_v[i_loc];
@@ -351,7 +350,7 @@ impl<'a> TetriXP2Space<'a> {
     /// element-by-element: DoF `i_loc` of element `el` lives at index
     /// `el * N_LOC_DOF + i_loc`.  Because every element owns its own slice of
     /// DoFs there is no global assembly and no coloring is required.
-    pub fn mlt_stiffness_dg(&self, u: &Vector, v: &mut Vector, alpha: f64) {
+    pub fn mlt_stiffness_dg(&self, u: &Vec<f64>, v: &mut Vec<f64>, alpha: f64) {
         v.par_chunks_mut(N_LOC_DOF)
             .zip(u.par_chunks(N_LOC_DOF))
             .zip(self.sym_grad_def_origin.par_iter())
@@ -359,7 +358,7 @@ impl<'a> TetriXP2Space<'a> {
                 let buf_u: &[f64; N_LOC_DOF] = u_chunk.try_into().unwrap();
                 let mut buf_v = [0.0f64; N_LOC_DOF];
 
-                tet_15::mlt_stiffness(buf_u, sym_grad, &mut buf_v);
+                tet_15::mlt_stiffness_opt(buf_u, sym_grad, &mut buf_v);
 
                 for i_loc in 0..N_LOC_DOF {
                     v_chunk[i_loc] = alpha * buf_v[i_loc];
@@ -370,7 +369,7 @@ impl<'a> TetriXP2Space<'a> {
     /// Collects a DG vector (`n_elem * N_LOC_DOF`) into a CG vector (`n_dof`)
     /// by averaging all DG contributions that share each global DoF.
     /// Equivalent to `collect_dg` divided by the element-sharing count.
-    pub fn collect_avg_dg(&self, dg: &Vector, cg: &mut Vector) {
+    pub fn collect_avg_dg(&self, dg: &Vec<f64>, cg: &mut Vec<f64>) {
         cg.par_iter_mut()
             .zip(self.glob2dg.par_iter())
             .for_each(|(cg_val, dg_indices)| {
@@ -382,7 +381,7 @@ impl<'a> TetriXP2Space<'a> {
     /// by summing all DG contributions that share each global DoF.
     /// Parallel over global DoFs: each task writes to one exclusive `cg[g]`
     /// and reads from its disjoint `glob2dg[g]` slice of `dg`.
-    pub fn collect_dg(&self, dg: &Vector, cg: &mut Vector) {
+    pub fn collect_dg(&self, dg: &Vec<f64>, cg: &mut Vec<f64>) {
         cg.par_iter_mut()
             .zip(self.glob2dg.par_iter())
             .for_each(|(cg_val, dg_indices)| {
@@ -390,10 +389,35 @@ impl<'a> TetriXP2Space<'a> {
             });
     }
 
+    /// Applies the inverse lumped mass matrix in-place on a DG vector.
+    pub fn mlt_inverse_mass(&self, dg: &mut Vec<f64>, mass: &Vec<f64>) {
+        // let mut tmp_cg = vec![0.0_f64; mass.len()];
+        // self.collect_dg(dg, &mut tmp_cg);
+        // for i in 0..self.n_dof {
+        //     tmp_cg[i] /= mass[i];
+        // }
+        // self.scatter_cg(&tmp_cg, dg);
+
+        // SAFETY: glob2dg partitions the DG indices (each DG slot belongs to
+        // exactly one CG dof), so parallel tasks access disjoint regions of `dg`.
+        // The pointer ptr is cast to usize so the closure captures a Sync + Send type.
+        let ptr = dg.as_mut_ptr() as usize;
+        self.glob2dg
+            .par_iter()
+            .zip(mass.par_iter())
+            .for_each(|(dg_indices, m)| {
+                let cg_val: f64 = dg_indices.iter().map(|&k| dg[k]).sum::<f64>() / m;
+                let ptr = ptr as *mut f64;
+                for &k in dg_indices {
+                    unsafe { *ptr.add(k) = cg_val };
+                }
+            });
+    }
+
     /// Scatters a CG vector (`n_dof`) into a DG vector (`n_elem * N_LOC_DOF`)
     /// by copying each global DoF value to all its DG slots.
     /// Parallel over DG indices via `dg2glob`: each task writes to one exclusive slot.
-    pub fn scatter_dg(&self, cg: &Vector, dg: &mut Vector) {
+    pub fn scatter_cg(&self, cg: &Vec<f64>, dg: &mut Vec<f64>) {
         dg.par_iter_mut()
             .zip(self.dg2glob.par_iter())
             .for_each(|(dg_val, &g)| {

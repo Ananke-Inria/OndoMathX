@@ -1,3 +1,5 @@
+/// 15-point quadrature rule for the reference tetrahedron,  
+///
 pub const POINTS: [[f64; 3]; 15] = [
     [0.0, 0.0, 0.0],
     [1.0, 0.0, 0.0],
@@ -239,6 +241,5 @@ pub fn mlt_stiffness_opt(input: &[f64; 15], sym_grad: &Matrix3<f64>, output: &mu
     super::tet_15_10b::tet_15_to_tet_10b(input, &mut b);
     let mut c = [0.0f64; 15];
     super::tet_10b::mlt_stiffness_opt(&b, sym_grad, &mut c);
-    super::tet_15_10b::tet_10b_to_tet_15(&c, output);
+    super::tet_15_10b::tet_15_to_tet_10b_transpose(&c, output);
 }
- 

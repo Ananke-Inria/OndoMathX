@@ -1,6 +1,5 @@
 use std::io::{self, Write};
 
-use crate::lal::Vector;
 use crate::tetrix_p2_space::TetriXP2Space;
 
 /// Write a VTK unstructured-grid file for a scalar solution.
@@ -10,7 +9,7 @@ use crate::tetrix_p2_space::TetriXP2Space;
 pub fn write<W: Write>(
     writer: &mut W,
     fe_space: &TetriXP2Space,
-    solution: &Vector,
+    solution: &[f64],
 ) -> io::Result<()> {
     let n_dof = fe_space.p2_num_dofs();
     let n_dof_glob = fe_space.num_dofs();
@@ -62,7 +61,7 @@ pub fn write<W: Write>(
 }
 
 /// Convenience wrapper that opens a file and calls `write`.
-pub fn write_vtk(file_path: &str, fe_space: &TetriXP2Space, solution: &Vector) {
+pub fn write_vtk(file_path: &str, fe_space: &TetriXP2Space, solution: &[f64]) {
     let file = std::fs::File::create(file_path)
         .unwrap_or_else(|e| panic!("Cannot create {}: {}", file_path, e));
     let mut buf = std::io::BufWriter::new(file);

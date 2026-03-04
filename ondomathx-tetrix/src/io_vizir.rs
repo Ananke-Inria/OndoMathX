@@ -1,8 +1,6 @@
 use rouage::mesh::UnstructuredMesh;
 
 use crate::tetrix_p2_space::{TetriXP2Space, ORDER};
-use crate::lal::Vector;
-
 /// Write a Vizir `.sol` file for a scalar or vector solution.
 ///
 /// The file follows the `MeshVersionFormatted 2` / `HOSolAt` convention used
@@ -11,7 +9,7 @@ pub fn write_solution(
     file_name: &str,
     fe_space: &TetriXP2Space,
     _mesh: &UnstructuredMesh,
-    solution: &Vector,
+    solution: &[f64],
     n: usize,
 ) {
     let dim_sol = solution.len() / fe_space.num_dofs();

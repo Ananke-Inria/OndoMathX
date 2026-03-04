@@ -1,34 +1,5 @@
-/// Dense vector (equivalent to LAL::Vector).
-pub type Vector = Vec<f64>;
-
-/// Diagonal matrix stored as its diagonal entries (equivalent to LAL::DiagonalMatrix).
-pub type DiagonalMatrix = Vec<f64>;
-
-pub fn new_vector(size: usize) -> Vector {
-    vec![0.0; size]
-}
-
-pub fn new_diagonal_matrix(size: usize) -> DiagonalMatrix {
-    vec![0.0; size]
-}
-
-pub fn dimension(v: &Vector) -> usize {
-    v.len()
-}
-
-pub fn scale(alpha: f64, v: &mut Vector) {
-    for x in v.iter_mut() {
-        *x *= alpha;
-    }
-}
-
-/// Accumulate value to the (i, i) diagonal entry (i == j for mass matrices).
-pub fn add_interaction(m: &mut DiagonalMatrix, i: usize, _j: usize, value: f64) {
-    m[i] += value;
-}
-
 /// Mass-weighted L² norm: sqrt( u^T M u ) for a diagonal mass matrix M.
-pub fn mass_norm(u: &Vector, mass: &DiagonalMatrix) -> f64 {
+pub fn mass_norm(u: &[f64], mass: &[f64]) -> f64 {
     u.iter()
         .zip(mass.iter())
         .map(|(&ui, &mi)| mi * ui * ui)
@@ -36,7 +7,7 @@ pub fn mass_norm(u: &Vector, mass: &DiagonalMatrix) -> f64 {
         .sqrt()
 }
 
-pub fn infinite_norm(v: &Vector) -> f64 {
+pub fn infinite_norm(v: &[f64]) -> f64 {
     v.iter().map(|x| x.abs()).fold(0.0_f64, f64::max)
 }
 
@@ -61,35 +32,39 @@ pub fn power_iteration<S, M>(
     n_iter_max: usize,
 ) -> (f64, usize, f64)
 where
-    S: FnMut(&mut Vector),
-    M: FnMut(&Vector, &mut Vector),
+    S: FnMut(&mut Vec<f64>),
+    M: FnMut(&Vec<f64>, &mut Vec<f64>),
 {
-    // Deterministic non-trivial initialisation (mirrors C++ reference)
-    let mut v1: Vector = (0..size)
+    // Deterministic non-trivial initialisation
+    let mut v1: Vec<f64> = (0..size)
         .map(|i| (i % 7 + 3 * (i % 3) + (i % 2) + i % 20) as f64)
         .collect();
     let mut v2 = vec![0.0_f64; size];
 
     let mut lambda1 = 0.0_f64;
     let mut residue = f64::MAX;
-    let mut n_iter  = 0_usize;
+    let mut n_iter = 0_usize;
 
     loop {
-        let lambda0 = lambda1;   // local copy; always read below
+        let lambda0 = lambda1; // local copy; always read below
 
-        mlt_add(&v1, &mut v2);  // v2 ← K v1
-        solve(&mut v2);          // v2 ← M⁻¹ K v1
+        mlt_add(&v1, &mut v2); // v2 ← K v1
+        solve(&mut v2); // v2 ← M⁻¹ K v1
         v1.copy_from_slice(&v2);
 
         lambda1 = infinite_norm(&v1);
-        for x in v1.iter_mut() { *x /= lambda1; }
+        for x in v1.iter_mut() {
+            *x /= lambda1;
+        }
 
         if lambda0 != 0.0 {
             residue = (lambda1 - lambda0).abs() / lambda0.abs();
         }
         n_iter += 1;
 
-        if residue <= tol || n_iter >= n_iter_max { break; }
+        if residue <= tol || n_iter >= n_iter_max {
+            break;
+        }
     }
 
     (lambda1, n_iter, residue)
