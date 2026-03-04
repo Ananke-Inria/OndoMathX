@@ -22,54 +22,23 @@ fn quad(a: u32, b: u32, c: u32) -> f64 {
         .sum()
 }
 
+
 // ---------------------------------------------------------------------------
 // Monomial exactness up to degree 2 (10 monomials)
 // ---------------------------------------------------------------------------
 #[test]
 fn test_quadrature_exactness_degree_2() {
     // degree 0
-    assert!(
-        (quad(0, 0, 0) - exact_tet_integral(0, 0, 0)).abs() < TOL,
-        "exact for 1"
-    );
-
+    assert!((quad(0,0,0) - exact_tet_integral(0,0,0)).abs() < TOL, "exact for 1");
     // degree 1
-    assert!(
-        (quad(1, 0, 0) - exact_tet_integral(1, 0, 0)).abs() < TOL,
-        "exact for u"
-    );
-    assert!(
-        (quad(0, 1, 0) - exact_tet_integral(0, 1, 0)).abs() < TOL,
-        "exact for v"
-    );
-    assert!(
-        (quad(0, 0, 1) - exact_tet_integral(0, 0, 1)).abs() < TOL,
-        "exact for w"
-    );
-
+    assert!((quad(1,0,0) - exact_tet_integral(1,0,0)).abs() < TOL, "exact for u");
+    assert!((quad(0,1,0) - exact_tet_integral(0,1,0)).abs() < TOL, "exact for v");
+    assert!((quad(0,0,1) - exact_tet_integral(0,0,1)).abs() < TOL, "exact for w");
     // degree 2
-    assert!(
-        (quad(2, 0, 0) - exact_tet_integral(2, 0, 0)).abs() < TOL,
-        "exact for u²"
-    );
-    assert!(
-        (quad(1, 1, 0) - exact_tet_integral(1, 1, 0)).abs() < TOL,
-        "exact for uv"
-    );
-    assert!(
-        (quad(1, 0, 1) - exact_tet_integral(1, 0, 1)).abs() < TOL,
-        "exact for uw"
-    );
-    assert!(
-        (quad(0, 2, 0) - exact_tet_integral(0, 2, 0)).abs() < TOL,
-        "exact for v²"
-    );
-    assert!(
-        (quad(0, 1, 1) - exact_tet_integral(0, 1, 1)).abs() < TOL,
-        "exact for vw"
-    );
-    assert!(
-        (quad(0, 0, 2) - exact_tet_integral(0, 0, 2)).abs() < TOL,
-        "exact for w²"
-    );
+    assert!((quad(2,0,0) - exact_tet_integral(2,0,0)).abs() < TOL, "exact for u²");
+    assert!((quad(1,1,0) - exact_tet_integral(1,1,0)).abs() < TOL, "exact for uv");
+    assert!((quad(1,0,1) - exact_tet_integral(1,0,1)).abs() < TOL, "exact for uw");
+    assert!((quad(0,2,0) - exact_tet_integral(0,2,0)).abs() < TOL, "exact for v²");
+    assert!((quad(0,1,1) - exact_tet_integral(0,1,1)).abs() < TOL, "exact for vw");
+    assert!((quad(0,0,2) - exact_tet_integral(0,0,2)).abs() < TOL, "exact for w²");
 }

@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
-use crate::tetrix_p2_space::TetriXP2Space;
 use crate::lal::Vector;
+use crate::tetrix_p2_space::TetriXP2Space;
 
 /// Write a VTK unstructured-grid file for a scalar solution.
 ///
@@ -52,7 +52,9 @@ pub fn write<W: Write>(
     for i_dof in 0..n_dof {
         let i_glob = fe_space.p2_glob2glob(i_dof);
         let mut v = solution[sys_dim * i_glob];
-        if v.abs() < 1e-40 { v = 0.0; }
+        if v.abs() < 1e-40 {
+            v = 0.0;
+        }
         writeln!(writer, "{}", v)?;
     }
 

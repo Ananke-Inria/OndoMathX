@@ -230,8 +230,15 @@ pub fn mlt_stiffness(input: &[f64; 15], sym_grad: &Matrix3<f64>, output: &mut [f
     super::tet_15_14::transpose_gradient_interpolation(&buf_grad, output);
 }
 
-// pub fn mlt_stiffness_opt(input: &[f64; 15], sym_grad: &Matrix3<f64>, output: &mut [f64; 15]) {
-//     let input_10: &[f64; 10] = (&input[..10]).try_into().unwrap();
-//     let output_10: &mut [f64; 10] = (&mut output[..10]).try_into().unwrap();
-//     super::tet_10::mlt_stiffness(input_10, sym_grad, output_10);
-// }
+/// Apply the local stiffness operator via the `tet_10b` basis.
+///
+/// Converts `input` to the `tet_10b` representation, delegates to
+/// [`super::tet_10b::mlt_stiffness_opt`], then converts the result back.
+pub fn mlt_stiffness_opt(input: &[f64; 15], sym_grad: &Matrix3<f64>, output: &mut [f64; 15]) {
+    let mut b = [0.0f64; 15];
+    super::tet_15_10b::tet_15_to_tet_10b(input, &mut b);
+    let mut c = [0.0f64; 15];
+    super::tet_10b::mlt_stiffness_opt(&b, sym_grad, &mut c);
+    super::tet_15_10b::tet_10b_to_tet_15(&c, output);
+}
+ 

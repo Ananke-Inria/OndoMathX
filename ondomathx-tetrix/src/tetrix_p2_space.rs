@@ -1,8 +1,9 @@
 use nalgebra::{Matrix3, Vector3};
+use rayon::prelude::*;
 use rouage::mesh::{DoFSet, Mesh, UnstructuredMesh, TETRAHEDRON};
 
-use crate::lal::{DiagonalMatrix, Vector};
 use crate::finite_element::{tet_14, tet_15, tet_15_14};
+use crate::lal::{DiagonalMatrix, Vector};
 
 pub const DIM: usize = 3;
 pub const ORDER: usize = 2;
@@ -23,6 +24,8 @@ pub struct TetriXP2Space<'a> {
     jacobian_origin: Vec<f64>,
     affine: Vec<bool>,
     loc2glob: Vec<Vec<usize>>,
+    glob2dg: Vec<Vec<usize>>,
+    dg2glob: Vec<usize>,
     p2_n_dof: usize,
     p2_loc2glob: Vec<Vec<usize>>,
     p2_glob2glob: Vec<usize>,
@@ -151,6 +154,18 @@ impl<'a> TetriXP2Space<'a> {
             }
         }
 
+        // Build glob2dg and dg2glob: forward and inverse DG ↔ CG index maps
+        let mut glob2dg = vec![vec![]; n_dof];
+        let mut dg2glob = vec![0usize; n_elem * N_LOC_DOF];
+        for el in 0..n_elem {
+            for i_loc in 0..N_LOC_DOF {
+                let g = loc2glob[el][i_loc];
+                let dg = el * N_LOC_DOF + i_loc;
+                glob2dg[g].push(dg);
+                dg2glob[dg] = g;
+            }
+        }
+
         // Element coloring (mesh.coloring is indexed by local 3-D element index)
         let n_color = mesh.n_colors;
         let mut elem_by_color: Vec<Vec<usize>> = vec![vec![]; n_color];
@@ -173,6 +188,8 @@ impl<'a> TetriXP2Space<'a> {
             jacobian_origin,
             affine,
             loc2glob,
+            glob2dg,
+            dg2glob,
             p2_n_dof,
             p2_loc2glob,
             p2_glob2glob,
@@ -312,5 +329,75 @@ impl<'a> TetriXP2Space<'a> {
                 }
             }
         }
+    }
+
+    /// Sequential version of `mlt_stiffness_dg` (no Rayon), useful for
+    /// profiling or single-threaded benchmarking.
+    pub fn mlt_stiffness_dg_seq(&self, u: &Vector, v: &mut Vector, alpha: f64) {
+        for el in 0..self.n_elem {
+            let offset = el * N_LOC_DOF;
+            let buf_u: &[f64; N_LOC_DOF] = u[offset..offset + N_LOC_DOF].try_into().unwrap();
+            let mut buf_v = [0.0f64; N_LOC_DOF];
+
+            tet_15::mlt_stiffness(buf_u, &self.sym_grad_def_origin[el], &mut buf_v);
+
+            for i_loc in 0..N_LOC_DOF {
+                v[offset + i_loc] = alpha * buf_v[i_loc];
+            }
+        }
+    }
+
+    /// Like `mlt_stiffness`, but for a DG layout where `u` and `v` are stored
+    /// element-by-element: DoF `i_loc` of element `el` lives at index
+    /// `el * N_LOC_DOF + i_loc`.  Because every element owns its own slice of
+    /// DoFs there is no global assembly and no coloring is required.
+    pub fn mlt_stiffness_dg(&self, u: &Vector, v: &mut Vector, alpha: f64) {
+        v.par_chunks_mut(N_LOC_DOF)
+            .zip(u.par_chunks(N_LOC_DOF))
+            .zip(self.sym_grad_def_origin.par_iter())
+            .for_each(|((v_chunk, u_chunk), sym_grad)| {
+                let buf_u: &[f64; N_LOC_DOF] = u_chunk.try_into().unwrap();
+                let mut buf_v = [0.0f64; N_LOC_DOF];
+
+                tet_15::mlt_stiffness(buf_u, sym_grad, &mut buf_v);
+
+                for i_loc in 0..N_LOC_DOF {
+                    v_chunk[i_loc] = alpha * buf_v[i_loc];
+                }
+            });
+    }
+
+    /// Collects a DG vector (`n_elem * N_LOC_DOF`) into a CG vector (`n_dof`)
+    /// by averaging all DG contributions that share each global DoF.
+    /// Equivalent to `collect_dg` divided by the element-sharing count.
+    pub fn collect_avg_dg(&self, dg: &Vector, cg: &mut Vector) {
+        cg.par_iter_mut()
+            .zip(self.glob2dg.par_iter())
+            .for_each(|(cg_val, dg_indices)| {
+                *cg_val = dg_indices.iter().map(|&k| dg[k]).sum::<f64>() / dg_indices.len() as f64;
+            });
+    }
+
+    /// Collects a DG vector (`n_elem * N_LOC_DOF`) into a CG vector (`n_dof`)
+    /// by summing all DG contributions that share each global DoF.
+    /// Parallel over global DoFs: each task writes to one exclusive `cg[g]`
+    /// and reads from its disjoint `glob2dg[g]` slice of `dg`.
+    pub fn collect_dg(&self, dg: &Vector, cg: &mut Vector) {
+        cg.par_iter_mut()
+            .zip(self.glob2dg.par_iter())
+            .for_each(|(cg_val, dg_indices)| {
+                *cg_val = dg_indices.iter().map(|&k| dg[k]).sum();
+            });
+    }
+
+    /// Scatters a CG vector (`n_dof`) into a DG vector (`n_elem * N_LOC_DOF`)
+    /// by copying each global DoF value to all its DG slots.
+    /// Parallel over DG indices via `dg2glob`: each task writes to one exclusive slot.
+    pub fn scatter_dg(&self, cg: &Vector, dg: &mut Vector) {
+        dg.par_iter_mut()
+            .zip(self.dg2glob.par_iter())
+            .for_each(|(dg_val, &g)| {
+                *dg_val = cg[g];
+            });
     }
 }

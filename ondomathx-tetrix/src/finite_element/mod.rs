@@ -1,6 +1,8 @@
 pub mod tet_4;
+pub mod tet_5;
 pub mod tet_10;
 pub mod tet_10_4;
+pub mod tet_10_5;
 pub mod tet_10b;
 pub mod tet_14;
 pub mod tet_15;

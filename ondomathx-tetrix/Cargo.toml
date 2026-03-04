@@ -12,12 +12,17 @@ name = "gen_mat_10_4"
 path = "src/bin/gen_mat_10_4.rs"
 
 [[bin]]
+name = "gen_mat_10_5"
+path = "src/bin/gen_mat_10_5.rs"
+
+[[bin]]
 name = "gen_mat_15_14"
 path = "src/bin/gen_mat_15_14.rs"
 
 [dependencies]
 rouage = { path = "../Rouage" }
 nalgebra = "0.33"
+rayon = "1"
 
 [[bench]]
 name = "tet_15_14"
@@ -33,6 +38,10 @@ harness = false
 
 [[bench]]
 name = "tet_10_4"
+harness = false
+
+[[bench]]
+name = "tet_10_5"
 harness = false
 
 [[bench]]

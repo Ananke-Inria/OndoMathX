@@ -1,6 +1,7 @@
 use nalgebra::Matrix3;
 use tetrix::finite_element::tet_10b::{
-    build_local_stiffness, d_shape_function, mlt_stiffness, shape_function, POINTS,
+    build_local_stiffness, d_shape_function, mlt_stiffness, mlt_stiffness_opt, shape_function,
+    POINTS,
 };
 
 const TOL: f64 = 1e-12;
@@ -167,6 +168,108 @@ fn test_stiffness_symmetry() {
                 "K not symmetric: K[{i},{j}]={:.12e}, K[{j},{i}]={:.12e}, Δ={:.2e}",
                 k[(i, j)],
                 k[(j, i)],
+                diff
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 9. mlt_stiffness_opt: K_PP block is exact
+//    With zero bubble input, the P2 output must match mlt_stiffness exactly.
+// ---------------------------------------------------------------------------
+#[test]
+fn test_mlt_stiffness_opt_pp_exact() {
+    let sym_grad = test_matrix();
+    let mut input = [0.0_f64; 15];
+    input[..10].copy_from_slice(&[1.0, -2.0, 0.5, 3.0, -1.5, 0.7, -0.3, 2.1, -0.9, 1.3]);
+
+    let mut out_exact = [0.0_f64; 15];
+    let mut out_opt = [0.0_f64; 15];
+    mlt_stiffness(&input, &sym_grad, &mut out_exact);
+    mlt_stiffness_opt(&input, &sym_grad, &mut out_opt);
+
+    for i in 0..10 {
+        let c = out_opt[i];
+        let e = out_exact[i];
+        assert!(
+            (c - e).abs() < TOL_K,
+            "K_PP row {i}: opt={c:.12e}, exact={e:.12e}, Δ={:.2e}",
+            (c - e).abs()
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 10. mlt_stiffness_opt: K_PB and K_BP blocks are exact for all bubbles
+// ---------------------------------------------------------------------------
+#[test]
+fn test_mlt_stiffness_opt_cross_blocks_exact() {
+    let sym_grad = test_matrix();
+    let k = build_local_stiffness(&sym_grad);
+    let mut input = [0.0_f64; 15];
+    let mut out_opt = [0.0_f64; 15];
+
+    // K_PB: apply e_j for each bubble j, check P2 rows 0..10
+    for j in 10..15 {
+        input.fill(0.0);
+        input[j] = 1.0;
+        mlt_stiffness_opt(&input, &sym_grad, &mut out_opt);
+        for i in 0..10 {
+            let c = out_opt[i];
+            let e = k[(i, j)];
+            assert!(
+                (c - e).abs() < TOL_K,
+                "K_PB: opt[{i}] for e_{j}: got={c:.12e}, K[{i},{j}]={e:.12e}, Δ={:.2e}",
+                (c - e).abs()
+            );
+        }
+    }
+
+    // K_BP: apply e_i for each P2 node i, check bubble rows 10..15
+    for i in 0..10 {
+        input.fill(0.0);
+        input[i] = 1.0;
+        mlt_stiffness_opt(&input, &sym_grad, &mut out_opt);
+        for j in 10..15 {
+            let c = out_opt[j];
+            let e = k[(j, i)];
+            assert!(
+                (c - e).abs() < TOL_K,
+                "K_BP: opt[{j}] for e_{i}: got={c:.12e}, K[{j},{i}]={e:.12e}, Δ={:.2e}",
+                (c - e).abs()
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 11. mlt_stiffness_opt: the operator is symmetric
+// ---------------------------------------------------------------------------
+#[test]
+fn test_mlt_stiffness_opt_symmetry() {
+    let sym_grad = test_matrix();
+    let mut input = [0.0_f64; 15];
+    let mut col = [0.0_f64; 15];
+    let mut k_opt = [[0.0_f64; 15]; 15];
+
+    for j in 0..15 {
+        input.fill(0.0);
+        input[j] = 1.0;
+        mlt_stiffness_opt(&input, &sym_grad, &mut col);
+        for i in 0..15 {
+            k_opt[i][j] = col[i];
+        }
+    }
+
+    for i in 0..15 {
+        for j in 0..15 {
+            let diff = (k_opt[i][j] - k_opt[j][i]).abs();
+            assert!(
+                diff < TOL_K,
+                "K_opt not symmetric: [{i},{j}]={:.12e}, [{j},{i}]={:.12e}, Δ={:.2e}",
+                k_opt[i][j],
+                k_opt[j][i],
                 diff
             );
         }
