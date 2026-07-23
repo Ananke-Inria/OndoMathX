@@ -18,15 +18,13 @@ impl Ord for DoF {
 
         if vec_eq!(self.uvw, other.uvw) {
             o = Ordering::Equal;
+        } else if vec_lt!(self.uvw, other.uvw) {
+            o = Ordering::Less;
         } else {
-            if vec_lt!(self.uvw, other.uvw) {
-                o = Ordering::Less;
-            } else {
-                o = Ordering::Greater;
-            }
+            o = Ordering::Greater;
         }
 
-        return o;
+        o
     }
 }
 
@@ -81,40 +79,38 @@ impl DoFSet {
         let mut dof_strictly_in_volume = Vec::new();
 
         for f in 0..reference_element.get_nfaces() {
-            let no: usize;
-
-            if reference_element.is_face_triangular(f) {
-                no = 6
+            let no = if reference_element.is_face_triangular(f) {
+                6
             } else {
-                no = 8;
-            }
+                8
+            };
 
             dof_on_faces[f].resize(no, vec![]);
             dof_strictly_in_faces[f].resize(no, vec![]);
         }
 
-        for i in 0..pos_list.len() {
+        for (i, pos) in pos_list.iter().enumerate() {
             assert!(
-                reference_element.is_inside(&pos_list[i]),
+                reference_element.is_inside(pos),
                 "The DoF is not inside the element"
             );
 
             dof_list.push(DoF {
-                uvw: pos_list[i],
+                uvw: *pos,
                 index: i,
             });
 
             dof_tree_set.insert(DoF {
-                uvw: pos_list[i],
+                uvw: *pos,
                 index: i,
             });
         }
 
         for dof in dof_list.iter() {
             // If the on a vertex
-            for v in 0..reference_element.get_nvertexes() {
+            for (v, dof_on_vertex) in dof_on_vertexes.iter_mut().enumerate() {
                 if reference_element.is_on_vertex(&dof.uvw, v) {
-                    dof_on_vertexes[v].push(dof.index);
+                    dof_on_vertex.push(dof.index);
                 }
             }
 
@@ -133,11 +129,11 @@ impl DoFSet {
                         index: 0,
                     });
 
-                    if t_dof.is_some() {
-                        dof_on_edges[e][1].push(t_dof.unwrap().index);
+                    if let Some(t_dof) = t_dof {
+                        dof_on_edges[e][1].push(t_dof.index);
 
                         if !reference_element.is_on_any_vertex(&t_uvw) {
-                            dof_strictly_in_edges[e][1].push(t_dof.unwrap().index);
+                            dof_strictly_in_edges[e][1].push(t_dof.index);
                         }
                     } else {
                         panic!("Symmetry problem in the d.o.f list");
@@ -147,13 +143,11 @@ impl DoFSet {
 
             for f in 0..reference_element.get_nfaces() {
                 if reference_element.is_on_face(&dof.uvw, f) {
-                    let no: usize;
-
-                    if reference_element.is_face_triangular(f) {
-                        no = 6
+                    let no = if reference_element.is_face_triangular(f) {
+                        6
                     } else {
-                        no = 8;
-                    }
+                        8
+                    };
 
                     for o in 0..no {
                         let t_uvw = reference_element.uvw_face_transform(&dof.uvw, f, o);
@@ -163,11 +157,11 @@ impl DoFSet {
                             index: 0,
                         });
 
-                        if t_dof.is_some() {
-                            dof_on_faces[f][o].push(t_dof.unwrap().index);
+                        if let Some(t_dof) = t_dof {
+                            dof_on_faces[f][o].push(t_dof.index);
 
                             if !reference_element.is_on_any_edge(&t_uvw) {
-                                dof_strictly_in_faces[f][o].push(t_dof.unwrap().index);
+                                dof_strictly_in_faces[f][o].push(t_dof.index);
                             }
                         } else {
                             panic!("Symmetry problem in the d.o.f list");
@@ -176,10 +170,8 @@ impl DoFSet {
                 }
             }
 
-            if reference_element.get_dim() == 3 {
-                if !reference_element.is_on_any_face(&dof.uvw) {
-                    dof_strictly_in_volume.push(dof.index);
-                }
+            if reference_element.get_dim() == 3 && !reference_element.is_on_any_face(&dof.uvw) {
+                dof_strictly_in_volume.push(dof.index);
             }
         }
 
@@ -210,7 +202,7 @@ impl DoFSet {
             );
         }
 
-        let dof_set = DoFSet {
+        DoFSet {
             dof_tree_set,
             dof_list,
             dof_on_vertexes,
@@ -220,8 +212,6 @@ impl DoFSet {
             dof_on_edges,
             dof_on_faces,
             reference_element,
-        };
-
-        return dof_set;
+        }
     }
 }

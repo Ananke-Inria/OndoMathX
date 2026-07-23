@@ -3,71 +3,81 @@ use std::io::{self, BufRead};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 
-pub use crate::deformation_field::*;
+pub use crate::diffeomorphism::*;
 pub use crate::mesh::*;
 pub use crate::topology::*;
 
 #[derive(Default, Debug)]
 pub struct UnstructuredMesh {
-    pub elements: Vec<MeshElement>,
+    elements: Vec<MeshElement>,
 
     //List of nodes
-    pub nodes: Vec<[f64; 3]>,
+    nodes: Vec<[f64; 3]>,
 
-    pub geometric_dimension: usize,
-    pub topologic_dimension: usize,
+    geometric_dimension: usize,
+    topologic_dimension: usize,
 
     //Additionnal deformation function
-    pub deformation: Option<DeformationField>,
+    deformation: Option<Diffeomorphism>,
 
     //Lists of elements sorted by dimension and label/////////
 
     //Element indices sorted by dimension
-    pub elements_by_dim: Vec<Vec<usize>>,
+    elements_by_dim: Vec<Vec<usize>>,
 
     //Elements indices sorted by dimension and label
-    pub elements_by_dim_and_label: Vec<HashMap<usize, Vec<usize>>>,
+    elements_by_dim_and_label: Vec<HashMap<usize, Vec<usize>>>,
 
     //Topology ///////////////////////////////////////////////
 
     //Number of faces and  edges of the mesh
-    pub nfaces: usize,
-    pub nedges: usize,
-    pub nvertexes: usize,
+    nfaces: usize,
+    nedges: usize,
+    nvertexes: usize,
 
     //For each element, list of the neighbour faces
-    pub neighbour_faces: Vec<Vec<usize>>,
+    neighbour_faces: Vec<Vec<usize>>,
 
     // For each face, the list of neighbour elements of highest dimension
     // faces_neighbour[k][i][0] corresponds to the index of the ith element connected to the face k.
     // faces_neighbour[k][i][1] corresponds to the index of the face in the element.
-    pub faces_neighbour: Vec<Vec<[usize; 2]>>,
+    faces_neighbour: Vec<Vec<[usize; 2]>>,
 
     //For each element, list of the neighbour edges
-    pub neighbour_edges: Vec<Vec<usize>>,
+    neighbour_edges: Vec<Vec<usize>>,
 
     // For each edge, the list of neighbour elements of highest dimension
     // edges_neighbour[k][i][0] corresponds to the index of the ith element connected to the edge k.
     // edges_neighbour[k][i][1] corresponds to the index of the edge in the element.
-    pub edges_neighbour: Vec<Vec<[usize; 2]>>,
+    edges_neighbour: Vec<Vec<[usize; 2]>>,
 
     //For each element, list of the neighbour vertexes
-    pub neighbour_vertexes: Vec<Vec<usize>>,
+    neighbour_vertexes: Vec<Vec<usize>>,
 
     // For each vertex , the list of neighbour elements of highest dimension
     // vertexes_neighbour[k][i][0] corresponds to the index of the ith element connected to the vertex k.
     // vertexes_neighbour[k][i][1] corresponds to the index of the vertex in the element.
-    pub vertexes_neighbour: Vec<Vec<[usize; 2]>>,
+    vertexes_neighbour: Vec<Vec<[usize; 2]>>,
     //////////////////////////////////////////////////////////
 
     //Coloring
-    pub coloring: Vec<usize>,
-    pub elements_by_color: Vec<Vec<usize>>,
-    pub n_colors: usize,
+    //`coloring` and `elements_by_color` are indexed by/store *ordinals*:
+    //positions within elements_by_dim[topologic_dimension], NOT global element
+    //indices (in meshes read from files, boundary elements may precede volume
+    //elements in the global numbering). The `Mesh` trait accessors translate
+    //between the two index spaces via `element_to_ordinal`.
+    coloring: Vec<usize>,
+    elements_by_color: Vec<Vec<usize>>,
+    n_colors: usize,
+
+    //For each element of the highest topological dimension, its ordinal
+    //(position in elements_by_dim[topologic_dimension]); usize::MAX for
+    //lower-dimensional elements.
+    element_to_ordinal: Vec<usize>,
 }
 
 impl Mesh for UnstructuredMesh {
-    fn get_deformation(&self) -> Option<&DeformationField> {
+    fn get_deformation(&self) -> Option<&Diffeomorphism> {
         self.deformation.as_ref()
     }
 
@@ -103,10 +113,8 @@ impl Mesh for UnstructuredMesh {
         let vec = self.elements_by_dim_and_label[dim].get(&label);
 
         match vec {
-            Some(v) => {
-                return v.clone();
-            }
-            None => return vec![],
+            Some(v) => v.clone(),
+            None => vec![],
         }
     }
 
@@ -119,7 +127,11 @@ impl Mesh for UnstructuredMesh {
     }
 
     fn get_element_color(&self, element_index: usize) -> usize {
-        self.coloring[element_index]
+        debug_assert!(
+            self.element_to_ordinal[element_index] != usize::MAX,
+            "Colors are only defined for elements of the highest topological dimension"
+        );
+        self.coloring[self.element_to_ordinal[element_index]]
     }
 
     fn get_element_index_by_color_to_element_index(
@@ -127,7 +139,9 @@ impl Mesh for UnstructuredMesh {
         color_index: usize,
         element_index_by_color: usize,
     ) -> usize {
-        self.elements_by_color[color_index][element_index_by_color]
+        //Translate the stored ordinal back to a global element index.
+        self.elements_by_dim[self.topologic_dimension]
+            [self.elements_by_color[color_index][element_index_by_color]]
     }
 
     fn get_element_grad_def(&self, e: usize, uvw: &[f64], grad_def: &mut [f64]) {
@@ -193,13 +207,74 @@ impl UnstructuredMesh {
         &self.elements[element_index]
     }
 
-    pub fn get_element_as_mut(&mut self, element_index: usize) -> &mut MeshElement {
-        &mut self.elements[element_index]
+    pub fn get_nodes(&self) -> &[[f64; 3]] {
+        &self.nodes
+    }
+
+    pub fn get_elements(&self) -> &[MeshElement] {
+        &self.elements
+    }
+
+    //Changes the label of every element through
+    //`new_label(element_index, &element) -> label`, then recomputes the
+    //label-based indexing (elements_by_dim_and_label) so that
+    //get_elements_by_dimension_and_label stays consistent.
+    pub fn set_labels<F>(&mut self, mut new_label: F)
+    where
+        F: FnMut(usize, &MeshElement) -> usize,
+    {
+        for el in 0..self.elements.len() {
+            let label = new_label(el, &self.elements[el]);
+            self.elements[el].label = label;
+        }
+
+        self.compute_indexing();
+    }
+
+    //Topology accessors (zero-cost borrows over the private topology tables)
+
+    pub fn get_nvertexes(&self) -> usize {
+        self.nvertexes
+    }
+
+    pub fn get_nedges(&self) -> usize {
+        self.nedges
+    }
+
+    pub fn get_nfaces(&self) -> usize {
+        self.nfaces
+    }
+
+    //For an element, the global indices of its vertexes/edges/faces
+    pub fn get_neighbour_vertexes(&self, element_index: usize) -> &[usize] {
+        &self.neighbour_vertexes[element_index]
+    }
+
+    pub fn get_neighbour_edges(&self, element_index: usize) -> &[usize] {
+        &self.neighbour_edges[element_index]
+    }
+
+    pub fn get_neighbour_faces(&self, element_index: usize) -> &[usize] {
+        &self.neighbour_faces[element_index]
+    }
+
+    //For a vertex/edge/face, the list of neighbour elements of highest
+    //dimension as [element_index, local_index_in_element] pairs
+    pub fn get_vertex_neighbours(&self, vertex_index: usize) -> &[[usize; 2]] {
+        &self.vertexes_neighbour[vertex_index]
+    }
+
+    pub fn get_edge_neighbours(&self, edge_index: usize) -> &[[usize; 2]] {
+        &self.edges_neighbour[edge_index]
+    }
+
+    pub fn get_face_neighbours(&self, face_index: usize) -> &[[usize; 2]] {
+        &self.faces_neighbour[face_index]
     }
 
     pub fn apply_deformation(&mut self) {
         if self.deformation.is_some() {
-            let deformation: &DeformationField = self.deformation.as_ref().unwrap();
+            let deformation: &Diffeomorphism = self.deformation.as_ref().unwrap();
 
             for i in 0..self.nodes.len() {
                 let mut p = [0.0; 3];
@@ -211,14 +286,13 @@ impl UnstructuredMesh {
         }
     }
 
-    pub fn add_deformation(&mut self, deformation_field: DeformationField) {
+    /// Composes `diffeo` on top of any existing deformation,
+    /// or sets it as the sole deformation if none is present yet.
+    pub fn compose_deformation(&mut self, diffeo: Diffeomorphism) {
         if self.deformation.is_some() {
-            self.deformation
-                .as_mut()
-                .unwrap()
-                .compose(deformation_field);
+            self.deformation.as_mut().unwrap().compose(diffeo);
         } else {
-            self.deformation = Some(deformation_field);
+            self.deformation = Some(diffeo);
         }
     }
     //fn into_second_order(&mut self) {}
@@ -257,7 +331,7 @@ impl UnstructuredMesh {
 
             self.elements_by_dim_and_label[dim]
                 .entry(label)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(el);
         }
 
@@ -267,6 +341,14 @@ impl UnstructuredMesh {
                 self.topologic_dimension = d;
                 break;
             }
+        }
+
+        self.element_to_ordinal = vec![usize::MAX; self.elements.len()];
+        for (ordinal, &el) in self.elements_by_dim[self.topologic_dimension]
+            .iter()
+            .enumerate()
+        {
+            self.element_to_ordinal[el] = ordinal;
         }
     }
     fn compute_topology(&mut self) {
@@ -284,9 +366,12 @@ impl UnstructuredMesh {
 
             for el in 0..nelements {
                 let element = &self.elements[el];
-                let vertexes = element.get_vertexes();
+                //The corner vertices are the first entries of `indexes`;
+                //high-order nodes (midpoints, face/interior nodes) come after
+                //and must not enter the vertex topology.
+                let nvertexes = element.geometric_element.reference_element.get_nvertexes();
 
-                for &v in vertexes {
+                for &v in &element.indexes[..nvertexes] {
                     //Number the vertex if it has not been numbered yet
                     if !vertexes_inserted[v] {
                         vertexes_index[v] = self.nvertexes;
@@ -310,13 +395,15 @@ impl UnstructuredMesh {
                 let edges = element.get_edges();
                 //Add the edges if they do not already exist
                 for e in edges {
-                    if !map_edges.contains_key(&e) {
-                        map_edges.insert(e, self.nedges);
-
-                        self.neighbour_edges[el].push(self.nedges);
-                        self.nedges += 1;
-                    } else {
-                        self.neighbour_edges[el].push(*map_edges.get(&e).unwrap());
+                    match map_edges.entry(e) {
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(self.nedges);
+                            self.neighbour_edges[el].push(self.nedges);
+                            self.nedges += 1;
+                        }
+                        std::collections::btree_map::Entry::Occupied(entry) => {
+                            self.neighbour_edges[el].push(*entry.get());
+                        }
                     }
                 }
             }
@@ -333,14 +420,15 @@ impl UnstructuredMesh {
                 let faces = element.get_faces();
                 //Add the faces if they do not already exist
                 for f in faces {
-                    if !map_faces.contains_key(&f) {
-                        map_faces.insert(f, self.nfaces);
-
-                        self.neighbour_faces[el].push(self.nfaces);
-
-                        self.nfaces += 1;
-                    } else {
-                        self.neighbour_faces[el].push(*map_faces.get(&f).unwrap());
+                    match map_faces.entry(f) {
+                        std::collections::btree_map::Entry::Vacant(entry) => {
+                            entry.insert(self.nfaces);
+                            self.neighbour_faces[el].push(self.nfaces);
+                            self.nfaces += 1;
+                        }
+                        std::collections::btree_map::Entry::Occupied(entry) => {
+                            self.neighbour_faces[el].push(*entry.get());
+                        }
                     }
                 }
             }
@@ -388,30 +476,23 @@ impl UnstructuredMesh {
 
         let mut graph = vec![vec![]; nelements];
 
-        //Array that is a local numbering for all the element of dimension self.topologic_dimension
-        let mut element_2_higest_dim_element = vec![0; self.elements.len()];
-        for i in 0..nelements {
-            let i_element = self.elements_by_dim[self.topologic_dimension][i];
-            element_2_higest_dim_element[i_element] = i;
-        }
-
         //Fill the graph matrix using vertexes
-        for i in 0..nelements {
+        for (i, graph_row) in graph.iter_mut().enumerate() {
             let ielement = self.elements_by_dim[self.topologic_dimension][i];
 
             for v in self.neighbour_vertexes[ielement].iter() {
                 for i_v_e in self.vertexes_neighbour[*v].iter() {
                     if i_v_e[0] != ielement {
-                        graph[i].push(element_2_higest_dim_element[i_v_e[0]]);
+                        graph_row.push(self.element_to_ordinal[i_v_e[0]]);
                     }
                 }
             }
         }
 
         //Sort and remove duplicate
-        for i in 0..nelements {
-            graph[i].sort();
-            graph[i].dedup();
+        for graph_row in graph.iter_mut() {
+            graph_row.sort();
+            graph_row.dedup();
         }
 
         graph
@@ -464,12 +545,14 @@ impl UnstructuredMesh {
     pub fn new_from_points_and_elements(
         nodes: Vec<[f64; 3]>,
         elements: Vec<MeshElement>,
-        deformation: Option<DeformationField>,
+        deformation: Option<Diffeomorphism>,
     ) -> UnstructuredMesh {
-        let mut mesh = UnstructuredMesh::default();
-        mesh.nodes = nodes;
-        mesh.elements = elements;
-        mesh.deformation = deformation;
+        let mut mesh = UnstructuredMesh {
+            nodes,
+            elements,
+            deformation,
+            ..Default::default()
+        };
 
         mesh.compute_dimension();
         mesh.compute_indexing();
@@ -518,22 +601,45 @@ impl UnstructuredMesh {
     fn read_elements_from_mesh(path: &str) -> Result<Vec<MeshElement>, std::io::Error> {
         let file = std::fs::File::open(path)?;
         let file_buf = io::BufReader::new(file);
-        let all_lines: Vec<String> = file_buf
-            .lines()
-            .map(|line_res| line_res.unwrap())
-            .collect();
+        let all_lines: Vec<String> = file_buf.lines().map(|line_res| line_res.unwrap()).collect();
 
         let mut elements: Vec<MeshElement> = Vec::new();
 
-        let section_specs: &[(&str, &GeometricElement, usize)] = &[
-            ("Edges", &EDGE2, 2),
-            ("Triangles", &TRIANGLE3, 3),
-            ("Quadrilaterals", &QUADRANGLE4, 4),
-            ("Tetrahedra", &TETRAHEDRON4, 4),
-            ("Hexahedra", &HEXAHEDRON8, 8),
+        //Medit "HexahedraQ2" section (convention of the C++ OndoMathX IO_MESH
+        //writer): 8 vertices, bottom edge ring (m01, m12, m23, m03), top edge
+        //ring (m45, m56, m67, m47), vertical edges (m04, m15, m26, m37), face
+        //centers (bottom, top, front, right, back, left), center.
+        //Internal position i is read from file position PERM[i].
+        const HEXAHEDRON_27_FROM_MESH: [usize; 27] = [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19, 12, 13, 14, 15, 20, 22, 25, 23,
+            24, 21, 26,
         ];
 
-        for &(section_name, geo_element, nvertices) in section_specs {
+        //(section name, element, number of nodes, file -> internal permutation)
+        //EdgesP2/TrianglesP2/TetrahedraP2/QuadrilateralsQ2 follow the
+        //Medit/libMeshb P2 convention: vertices, then the edge nodes in the
+        //edge order (1,2),(2,3),(3,1)/(4,1)[, ...], then face/interior nodes —
+        //which coincides with the internal ordering of reference_elements.rs,
+        //hence no permutation.
+        let section_specs: &[(&str, &GeometricElement, usize, Option<&[usize]>)] = &[
+            ("Edges", &EDGE2, 2, None),
+            ("Triangles", &TRIANGLE3, 3, None),
+            ("Quadrilaterals", &QUADRANGLE4, 4, None),
+            ("Tetrahedra", &TETRAHEDRON4, 4, None),
+            ("Hexahedra", &HEXAHEDRON8, 8, None),
+            ("EdgesP2", &EDGE3, 3, None),
+            ("TrianglesP2", &TRIANGLE6, 6, None),
+            ("QuadrilateralsQ2", &QUADRANGLE9, 9, None),
+            ("TetrahedraP2", &TETRAHEDRON10, 10, None),
+            (
+                "HexahedraQ2",
+                &HEXAHEDRON27,
+                27,
+                Some(&HEXAHEDRON_27_FROM_MESH),
+            ),
+        ];
+
+        for &(section_name, geo_element, nnodes, permutation) in section_specs {
             if let Some(pos) = all_lines.iter().position(|l| l.trim() == section_name) {
                 let nelem = all_lines[pos + 1].trim().parse::<usize>().unwrap();
 
@@ -541,11 +647,17 @@ impl UnstructuredMesh {
                     let line = &all_lines[pos + 2 + k];
                     let fields: Vec<&str> = line.split_whitespace().collect();
 
-                    let indexes: Vec<usize> = (0..nvertices)
-                        .map(|i| fields[i].parse::<usize>().unwrap() - 1)
-                        .collect();
+                    let indexes: Vec<usize> = match permutation {
+                        None => (0..nnodes)
+                            .map(|i| fields[i].parse::<usize>().unwrap() - 1)
+                            .collect(),
+                        Some(perm) => perm
+                            .iter()
+                            .map(|&p| fields[p].parse::<usize>().unwrap() - 1)
+                            .collect(),
+                    };
 
-                    let label = fields[nvertices].parse::<usize>().unwrap();
+                    let label = fields[nnodes].parse::<usize>().unwrap();
 
                     elements.push(MeshElement {
                         geometric_element: geo_element,
@@ -606,7 +718,7 @@ impl UnstructuredMesh {
                 split_node_line[3].parse::<f64>().unwrap(),
             ]);
         }
-        return Ok(points);
+        Ok(points)
     }
     fn read_elements_from_msh(path: &str) -> Result<Vec<MeshElement>, std::io::Error> {
         // Opening file & defining iterator over nodes segments.
@@ -623,6 +735,22 @@ impl UnstructuredMesh {
         let mut elements: Vec<MeshElement> = Vec::new();
         let nelem = elements_lines.next().unwrap().parse::<usize>().unwrap();
         elements.reserve(nelem);
+
+        //Node permutations for high-order elements whose Gmsh ordering differs
+        //from the internal ordering of geometric_elements.rs (internal
+        //position i is read from file position PERM[i]).
+
+        //Gmsh tetrahedron10: the last two edge midpoints (m13, m23) are
+        //swapped with respect to TETRAHEDRON_EDGES_TOPOLOGY.
+        const TETRAHEDRON_10_FROM_MSH: [usize; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 9, 8];
+
+        //Gmsh hexahedron27: edge midpoints in Gmsh's edge order
+        //(0,1),(0,3),(0,4),(1,2),(1,5),(2,3),(2,6),(3,7),(4,5),(4,7),(5,6),(6,7);
+        //face centers and center coincide with the internal ordering.
+        const HEXAHEDRON_27_FROM_MSH: [usize; 27] = [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 9, 10, 12, 14, 15, 16, 18, 19, 17, 20, 21, 22, 23,
+            24, 25, 26,
+        ];
 
         for element_line in elements_lines {
             let split_element_line: Vec<&str> = element_line.split(' ').collect();
@@ -718,12 +846,80 @@ impl UnstructuredMesh {
                     })
                 }
 
+                "8" => {
+                    // Edge3 (Gmsh node order coincides with the internal one)
+                    let base = split_element_line.len() - 3;
+                    let indexes: Vec<usize> = (0..3)
+                        .map(|i| split_element_line[base + i].parse::<usize>().unwrap() - 1)
+                        .collect();
+
+                    elements.push(MeshElement {
+                        geometric_element: &EDGE3,
+                        label,
+                        indexes,
+                    })
+                }
+                "9" => {
+                    // Triangle6 (Gmsh node order coincides with the internal one)
+                    let base = split_element_line.len() - 6;
+                    let indexes: Vec<usize> = (0..6)
+                        .map(|i| split_element_line[base + i].parse::<usize>().unwrap() - 1)
+                        .collect();
+
+                    elements.push(MeshElement {
+                        geometric_element: &TRIANGLE6,
+                        label,
+                        indexes,
+                    })
+                }
+                "10" => {
+                    // Quadrangle9 (Gmsh node order coincides with the internal one)
+                    let base = split_element_line.len() - 9;
+                    let indexes: Vec<usize> = (0..9)
+                        .map(|i| split_element_line[base + i].parse::<usize>().unwrap() - 1)
+                        .collect();
+
+                    elements.push(MeshElement {
+                        geometric_element: &QUADRANGLE9,
+                        label,
+                        indexes,
+                    })
+                }
+                "11" => {
+                    // Tetrahedron10 (permuted from the Gmsh node ordering)
+                    let base = split_element_line.len() - 10;
+                    let indexes: Vec<usize> = TETRAHEDRON_10_FROM_MSH
+                        .iter()
+                        .map(|&p| split_element_line[base + p].parse::<usize>().unwrap() - 1)
+                        .collect();
+
+                    elements.push(MeshElement {
+                        geometric_element: &TETRAHEDRON10,
+                        label,
+                        indexes,
+                    })
+                }
+                "12" => {
+                    // Hexahedron27 (permuted from the Gmsh node ordering)
+                    let base = split_element_line.len() - 27;
+                    let indexes: Vec<usize> = HEXAHEDRON_27_FROM_MSH
+                        .iter()
+                        .map(|&p| split_element_line[base + p].parse::<usize>().unwrap() - 1)
+                        .collect();
+
+                    elements.push(MeshElement {
+                        geometric_element: &HEXAHEDRON27,
+                        label,
+                        indexes,
+                    })
+                }
+
                 "15" => {}
                 _ => panic!("Element type {} not supported yet", split_element_line[1]),
             }
         }
 
-        return Ok(elements);
+        Ok(elements)
     }
 
     pub fn get_numbering(&self, dof_set: &DoFSet) -> (Vec<Vec<usize>>, usize) {
@@ -747,13 +943,13 @@ impl UnstructuredMesh {
 
                 let dof_on_vertexes = &dof_set.dof_on_vertexes[v];
 
-                if dof_on_vertexes.len() > 0 {
+                if !dof_on_vertexes.is_empty() {
                     //create the numbering on the node (if needed)
                     if vertexes_numbering[k].is_empty() {
                         vertexes_numbering[k].resize(dof_on_vertexes.len(), 0);
 
-                        for n in 0..dof_on_vertexes.len() {
-                            vertexes_numbering[k][n] = n_dof;
+                        for num in vertexes_numbering[k].iter_mut() {
+                            *num = n_dof;
                             n_dof += 1;
                         }
                     }
@@ -773,13 +969,13 @@ impl UnstructuredMesh {
                     let o = self.elements[*el].get_edge(e).get_orientation();
                     let dof_in_edge = &dof_set.dof_strictly_in_edges[e][o];
 
-                    if dof_in_edge.len() > 0 {
+                    if !dof_in_edge.is_empty() {
                         //create the numbering on the node (if needed)
                         if edges_numbering[k].is_empty() {
                             edges_numbering[k].resize(dof_in_edge.len(), 0);
 
-                            for n in 0..dof_in_edge.len() {
-                                edges_numbering[k][n] = n_dof;
+                            for num in edges_numbering[k].iter_mut() {
+                                *num = n_dof;
                                 n_dof += 1;
                             }
                         }
@@ -800,13 +996,13 @@ impl UnstructuredMesh {
                     let o = self.elements[*el].get_face(f).get_orientation();
                     let dof_in_face = &dof_set.dof_strictly_in_faces[f][o];
 
-                    if dof_in_face.len() > 0 {
+                    if !dof_in_face.is_empty() {
                         //create the numbering on the node (if needed)
                         if faces_numbering[k].is_empty() {
                             faces_numbering[k].resize(dof_in_face.len(), 0);
 
-                            for n in 0..dof_in_face.len() {
-                                faces_numbering[k][n] = n_dof;
+                            for num in faces_numbering[k].iter_mut() {
+                                *num = n_dof;
                                 n_dof += 1;
                             }
                         }
@@ -835,7 +1031,7 @@ impl UnstructuredMesh {
             for el in self.elements_by_dim[0].iter() {
                 let i_vertex = self.elements[*el].indexes[0];
 
-                assert!(vertexes_numbering[i_vertex].len()>0, "One vertex can not be numbered since it is not connected with any numbered highest dimensionnal element");
+                assert!(!vertexes_numbering[i_vertex].is_empty(), "One vertex can not be numbered since it is not connected with any numbered highest dimensionnal element");
 
                 numbering[*el] = vertexes_numbering[i_vertex].clone();
             }
@@ -845,7 +1041,7 @@ impl UnstructuredMesh {
             for el in self.elements_by_dim[1].iter() {
                 let i_edge = self.neighbour_edges[*el][0];
 
-                assert!(self.edges_neighbour[i_edge].len()>0, "One edge can not be numbered since it is not connected with any numbered highest dimensionnal element");
+                assert!(!self.edges_neighbour[i_edge].is_empty(), "One edge can not be numbered since it is not connected with any numbered highest dimensionnal element");
 
                 let i_elem = self.edges_neighbour[i_edge][0][0];
                 let i_interface = self.edges_neighbour[i_edge][0][1];
@@ -868,7 +1064,7 @@ impl UnstructuredMesh {
             for el in self.elements_by_dim[2].iter() {
                 let i_face = self.neighbour_faces[*el][0];
 
-                assert!(self.faces_neighbour[i_face].len()>0, "One face can not be numbered since it is not connected with any numbered 3D dimensionnal element");
+                assert!(!self.faces_neighbour[i_face].is_empty(), "One face can not be numbered since it is not connected with any numbered 3D dimensionnal element");
 
                 let i_elem = self.faces_neighbour[i_face][0][0];
                 let i_interface = self.faces_neighbour[i_face][0][1];
@@ -887,6 +1083,6 @@ impl UnstructuredMesh {
             }
         }
 
-        return (numbering, n_dof);
+        (numbering, n_dof)
     }
 }

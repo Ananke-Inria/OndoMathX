@@ -1,10 +1,17 @@
 use crate::reference_elements::*;
 use std::cmp::Ordering;
 
-#[derive(Clone, Default, Debug, Hash)]
+#[derive(Clone, Default, Debug)]
 pub struct Edge {
     indexes: [usize; 2],
     sorted_indexes: [usize; 2],
+}
+
+//Hash must be consistent with PartialEq, which only compares sorted_indexes
+impl std::hash::Hash for Edge {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.sorted_indexes.hash(state);
+    }
 }
 
 impl Ord for Edge {
@@ -43,25 +50,32 @@ impl Edge {
 
     pub fn get_orientation(&self) -> usize {
         if self.indexes[0] == self.sorted_indexes[0] {
-            return 0;
+            0
         } else {
-            return 1;
+            1
         }
     }
 
     pub fn get_relative_orientation(edge_1: &Self, edge_2: &Self) -> usize {
         if edge_1.indexes[0] == edge_2.indexes[0] {
-            return 0;
+            0
         } else {
-            return 1;
+            1
         }
     }
 }
 
-#[derive(Clone, Default, Debug, Hash)]
+#[derive(Clone, Default, Debug)]
 pub struct Face {
     indexes: [usize; 4],
     sorted_indexes: [usize; 4],
+}
+
+//Hash must be consistent with PartialEq, which only compares sorted_indexes
+impl std::hash::Hash for Face {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.sorted_indexes.hash(state);
+    }
 }
 
 impl Ord for Face {
@@ -109,15 +123,15 @@ impl Face {
             }
         }
 
-        return sorted_indexes;
+        sorted_indexes
     }
 
     pub fn new(indexes: [usize; 4]) -> Face {
         let sorted_indexes = Self::sort_face_indexes(&indexes);
 
         Face {
-            indexes: indexes,
-            sorted_indexes: sorted_indexes,
+            indexes,
+            sorted_indexes,
         }
     }
 
@@ -129,21 +143,15 @@ impl Face {
     }
 
     pub fn is_triangular(&self) -> bool {
-        return Self::is_triangular_from_indexes(&self.indexes);
+        Self::is_triangular_from_indexes(&self.indexes)
     }
 
     //Recover the number of the orientation of the face f2 relative to face f1
     pub fn get_orientation(&self) -> usize {
         if self.is_triangular() {
-            return Self::get_orientation_in_triangle_from_indices(
-                &self.sorted_indexes,
-                &self.indexes,
-            );
+            Self::get_orientation_in_triangle_from_indices(&self.sorted_indexes, &self.indexes)
         } else {
-            return Self::get_orientation_in_quadrangle_from_indices(
-                &self.sorted_indexes,
-                &self.indexes,
-            );
+            Self::get_orientation_in_quadrangle_from_indices(&self.sorted_indexes, &self.indexes)
         }
     }
 
@@ -182,15 +190,9 @@ impl Face {
         assert!(face_1.is_triangular() == face_2.is_triangular());
 
         if face_1.is_triangular() {
-            return Self::get_orientation_in_triangle_from_indices(
-                &face_1.indexes,
-                &face_2.indexes,
-            );
+            Self::get_orientation_in_triangle_from_indices(&face_1.indexes, &face_2.indexes)
         } else {
-            return Self::get_orientation_in_quadrangle_from_indices(
-                &face_1.indexes,
-                &face_2.indexes,
-            );
+            Self::get_orientation_in_quadrangle_from_indices(&face_1.indexes, &face_2.indexes)
         }
     }
 }

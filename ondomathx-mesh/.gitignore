@@ -1,3 +1,7 @@
 /target
 .DS_Store
 .vscode
+
+# Generated test output meshes
+tests/results/*
+!tests/results/.gitkeep

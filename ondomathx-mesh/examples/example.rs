@@ -1,16 +1,19 @@
-extern crate rouage;
+extern crate anamesh;
 
-use rouage::mesh::*;
+use anamesh::mesh::*;
 use unstructured_mesh::UnstructuredMesh;
 
 fn main() {
     let mesh = UnstructuredMesh::new_from_msh("./assets/L.msh").unwrap();
 
-    println!("Point lists: {:?}\n", mesh.nodes);
+    println!("Point lists: {:?}\n", mesh.get_nodes());
 
-    println!("Element lists: {:?}\n", mesh.elements);
+    println!("Element lists: {:?}\n", mesh.get_elements());
 
-    println!("topology lists: {:?}\n", mesh.neighbour_edges);
+    let neighbour_edges: Vec<&[usize]> = (0..mesh.get_nelements())
+        .map(|el| mesh.get_neighbour_edges(el))
+        .collect();
+    println!("topology lists: {:?}\n", neighbour_edges);
 
     let tri_data: &ReferenceElement = &TRIANGLE;
 

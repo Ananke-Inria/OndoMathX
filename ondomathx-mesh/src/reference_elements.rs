@@ -3,6 +3,7 @@ use std::f64::consts::SQRT_2;
 const SQRT_3: f64 = 1.7320508075688772;
 
 use crate::eq;
+use crate::gt;
 use crate::leq;
 use crate::vec_diff;
 use crate::vec_eq;
@@ -322,33 +323,30 @@ pub const TETRAHEDRON: ReferenceElement = ReferenceElement {
 
 impl ReferenceElement {
     pub fn get_nfaces(&self) -> usize {
-        return self.topology[0];
+        self.topology[0]
     }
 
     pub fn get_nedges(&self) -> usize {
-        return self.topology[1];
+        self.topology[1]
     }
 
     pub fn get_nvertexes(&self) -> usize {
-        return self.topology[2];
+        self.topology[2]
     }
 
     pub fn get_dim(&self) -> usize {
-        return self.topology[3];
+        self.topology[3]
     }
 
     pub fn is_face_triangular(&self, f: usize) -> bool {
-        return self.faces[f][2] == self.faces[f][3];
+        self.faces[f][2] == self.faces[f][3]
     }
 
     pub fn is_inside(&self, uvw: &[f64]) -> bool {
         match self.get_dim() {
             1 => {
-                assert!(self.topology == &EDGE_TOPOLOGY);
-                return leq!(uvw[0], 1.0)
-                    && leq!(0.0, uvw[0])
-                    && eq!(uvw[1], 0.0)
-                    && eq!(uvw[2], 0.0);
+                assert!(self.topology == EDGE_TOPOLOGY);
+                leq!(uvw[0], 1.0) && leq!(0.0, uvw[0]) && eq!(uvw[1], 0.0) && eq!(uvw[2], 0.0)
             }
             2 => {
                 if !eq!(uvw[2], 0.0) {
@@ -360,24 +358,24 @@ impl ReferenceElement {
 
                     let a = vec_diff!(uvw, self.vertexes[self.edges[e][0]]);
 
-                    if !leq!(vec_sp!(n, a), 0.0) {
+                    if gt!(vec_sp!(n, a), 0.0) {
                         return false;
                     }
                 }
 
-                return true;
+                true
             }
             3 => {
                 for f in 0..self.get_nfaces() {
                     let n: [f64; 3] = self.normals[f];
                     let a: [f64; 3] = vec_diff!(uvw, self.vertexes[self.faces[f][0]]);
 
-                    if !leq!(vec_sp!(n, a), 0.0) {
+                    if gt!(vec_sp!(n, a), 0.0) {
                         return false;
                     }
                 }
 
-                return true;
+                true
             }
             _ => {
                 panic!("Elements should have a dimension less or equal 3");
@@ -397,7 +395,7 @@ impl ReferenceElement {
         let a_a = vec_sp!(a, a);
         let b_b = vec_sp!(b, b);
 
-        return eq!(a_a * b_b, a_b * a_b) && leq!(a_a, b_b);
+        eq!(a_a * b_b, a_b * a_b) && leq!(a_a, b_b)
     }
 
     pub fn is_on_face(&self, uvw: &[f64], f: usize) -> bool {
@@ -405,9 +403,7 @@ impl ReferenceElement {
             1 => {
                 panic!("This function is not supported for dimension 1 elements");
             }
-            2 => {
-                return self.is_inside(uvw);
-            }
+            2 => self.is_inside(uvw),
             3 => {
                 let n = self.normals[f];
                 let a = vec_diff!(uvw, self.vertexes[self.faces[f][0]]);
@@ -416,7 +412,7 @@ impl ReferenceElement {
                     return false;
                 }
 
-                return self.is_inside(uvw);
+                self.is_inside(uvw)
             }
 
             _ => {
@@ -426,7 +422,7 @@ impl ReferenceElement {
     }
 
     pub fn is_on_vertex(&self, uvw: &[f64], v: usize) -> bool {
-        return vec_eq!(uvw, self.vertexes[v]);
+        vec_eq!(uvw, self.vertexes[v])
     }
 
     pub fn is_on_any_vertex(&self, uvw: &[f64]) -> bool {
@@ -436,7 +432,7 @@ impl ReferenceElement {
             }
         }
 
-        return false;
+        false
     }
 
     pub fn is_on_any_edge(&self, uvw: &[f64]) -> bool {
@@ -446,7 +442,7 @@ impl ReferenceElement {
             }
         }
 
-        return false;
+        false
     }
 
     pub fn is_on_any_face(&self, uvw: &[f64]) -> bool {
@@ -456,7 +452,7 @@ impl ReferenceElement {
             }
         }
 
-        return false;
+        false
     }
 
     pub fn uvw_edge_transform(&self, uvw: &[f64], e: usize, o: usize) -> [f64; 3] {
@@ -494,7 +490,7 @@ impl ReferenceElement {
             ];
         }
 
-        return uvw_o;
+        uvw_o
     }
 
     pub fn uvw_face_transform(&self, uvw: &[f64], f: usize, o: usize) -> [f64; 3] {
@@ -573,13 +569,11 @@ impl ReferenceElement {
             );
         }
 
-        let uvw_o = [
+        [
             origin[0] + l[0] * d1_o[0] + l[1] * d2_o[0],
             origin[1] + l[0] * d1_o[1] + l[1] * d2_o[1],
             origin[2] + l[0] * d1_o[2] + l[1] * d2_o[2],
-        ];
-
-        return uvw_o;
+        ]
     }
 }
 

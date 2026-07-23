@@ -1,6 +1,6 @@
-# Rouage
+# Anamesh
 
-Rouage is a Rust library for finite element mesh handling. It provides the building blocks needed to go from a mesh file or a parametric mesh description all the way to a global DOF numbering ready for finite element assembly: reference elements, geometric elements with shape functions, mesh I/O, mesh topology, deformation fields, and DOF management.
+Anamesh is a Rust library for finite element mesh handling. It provides the building blocks needed to go from a mesh file or a parametric mesh description all the way to a global DOF numbering ready for finite element assembly: reference elements, geometric elements with shape functions, mesh I/O, mesh topology, deformation fields, and DOF management.
 
 ---
 
@@ -32,23 +32,35 @@ Currently implemented elements:
 | `EDGE2`        | Segment     | P1    | 2     | 1       |
 | `EDGE3`        | Segment     | P2    | 3     | 8       |
 | `TRIANGLE3`    | Triangle    | P1    | 3     | 2       |
+| `TRIANGLE6`    | Triangle    | P2    | 6     | 9       |
 | `QUADRANGLE4`  | Quadrangle  | Q1    | 4     | 3       |
 | `QUADRANGLE9`  | Quadrangle  | Q2    | 9     | 10      |
 | `TETRAHEDRON4` | Tetrahedron | P1    | 4     | 4       |
+| `TETRAHEDRON10`| Tetrahedron | P2    | 10    | 11      |
 | `HEXAHEDRON8`  | Hexahedron  | Q1    | 8     | 5       |
+| `HEXAHEDRON27` | Hexahedron  | Q2    | 27    | 12      |
 
-`QUADRANGLE9` uses the full tensor-product Q2 basis built from the 1D quadratic Lagrange polynomials on [0,1] (vertex, midpoint, and interior node per direction).
+`QUADRANGLE9` and `HEXAHEDRON27` use the full tensor-product Q2 basis built from the 1D quadratic Lagrange polynomials on [0,1] (vertex, midpoint, and interior node per direction). Their node ordering follows the topology tables of `reference_elements` (vertices, then edge midpoints in edge order, then face centers, then the interior node); for `HEXAHEDRON27` and `TETRAHEDRON10` this differs from Gmsh's node ordering, so a permutation will be needed when wiring them into the `.msh` reader/writer.
 
-### `deformation_field`
+### `diffeomorphism`
 
-A `DeformationField` represents a smooth map f : R^`inner_dim` → R^`outer_dim` through two function pointers:
+A `Diffeomorphism` represents a smooth map f : R^`inner_dim` → R^`outer_dim` through two
+function pointers, plus a `params: Vec<f64>` slice of auxiliary constants passed to them
+(the pointers are plain `fn`s and cannot capture, so per-map data travels through `params`):
 
-- `diffeo(x, f_x)` — evaluates f(x).
-- `grad_diffeo(x, grad)` — multiplies `grad` in-place by the Jacobian Df(x), i.e. `grad ← Df(x) · grad`.
+- `diffeo(params, x, f_x)` — evaluates f(x), writing the result into `f_x`.
+- `grad_diffeo(params, x, grad)` — multiplies `grad` in-place by the Jacobian Df(x), i.e. `grad ← Df(x) · grad`.
 
-Fields can be composed: `field.compose(inner)` turns `field` into `f ∘ g`, with the chain rule applied automatically in `grad_eval`. The helper `test_grad` validates the Jacobian against centred finite differences, which is useful when implementing new deformation maps.
+Call them through the methods `eval(x, f_x)` and `grad_eval(x, grad)`, which forward the stored
+`params` and apply any inner deformation. Maps can be composed: `field.compose(inner)` sets an
+`inner_deformation` g so `field` evaluates f ∘ g, with the chain rule applied automatically in
+`grad_eval`. The helper `test_grad` validates the Jacobian against centred finite differences,
+which is useful when implementing new deformation maps.
 
-The `Square` mesh and `UnstructuredMesh` both accept an optional `DeformationField`. When a deformation is attached, node coordinates are passed through it when writing to `.msh` and when computing the Jacobian of the element map (`get_element_grad_def`). `apply_deformation` permanently bakes the deformation into the node list.
+The `Square` and `Circle` meshes and `UnstructuredMesh` all accept an optional `Diffeomorphism`.
+When a deformation is attached, node coordinates are passed through it when writing to `.msh` and
+when computing the Jacobian of the element map (`get_element_grad_def`). `UnstructuredMesh::apply_deformation`
+permanently bakes the deformation into the node list.
 
 ### `mesh` — the `Mesh` trait
 
@@ -59,13 +71,29 @@ All mesh types implement the `Mesh` trait, which exposes:
 - Geometry: `get_geometric_dimension`, `get_topologic_dimension`.
 - Element Jacobian: `get_element_grad_def(element_index, uvw, grad_def)` — fills `grad_def` with ∂x/∂u evaluated at reference coordinates `uvw`, taking any attached deformation into account.
 - Coloring: `get_ncolors`, `get_element_color`, `get_nelements_by_color`, `get_element_index_by_color_to_element_index`.
-- Conversion: `get_unstructured_mesh` (default implementation), `write_msh`.
+- Conversion: `get_unstructured_mesh` (default implementation), `write_msh` (Gmsh 2.2), `write_mesh` (Medit ASCII, readable by Vizir4).
 
 #### `Square`
 
-A structured 2D quadrilateral mesh over the rectangle `[origin_x, origin_x + lx] × [origin_y, origin_y + ly]` divided into `nx × ny` cells. Boundary edges are exposed as four groups labelled 0 (bottom), 1 (right), 2 (top), 3 (left). The mesh supports an optional `DeformationField`, which makes it easy to produce non-rectangular domains analytically without storing any extra nodes.
+A structured 2D quadrilateral mesh over the rectangle `[origin_x, origin_x + lx] × [origin_y, origin_y + ly]` divided into `nx × ny` cells. Boundary edges are exposed as four groups labelled 0 (bottom), 1 (right), 2 (top), 3 (left). The mesh supports an optional `Diffeomorphism`, which makes it easy to produce non-rectangular domains analytically without storing any extra nodes.
+
+The constructor takes an optional `q2` flag (default `false`). When active the mesh carries Q2 geometric nodes — the Q1 vertices keep their numbering and the edge midpoints / cell centers are appended after them — and the elements become `QUADRANGLE9` / `EDGE3`, so `write_msh` and `get_unstructured_mesh` produce a Q2 mesh (useful to represent a deformed domain with second-order accuracy).
 
 The coloring is hardcoded to 4 colours in a 2×2 checkerboard pattern, suitable for lock-free parallel assembly.
+
+#### `Circle`
+
+A structured quadrilateral mesh of a 2D disk of radius `R`. The reference domain
+`[-r_ref, r_ref]²` (`r_ref = R/√2`) is split into an inner square and four arms, then mapped
+to the disk by a built-in `Diffeomorphism` (radial blend on the arms, identity on the inner
+square). The refinement parameters `n_x`, `n_rho`, and `alpha` are chosen automatically so that
+elements are close to square.
+
+Like `Square`, the constructor takes an optional `q2` flag (default `false`). When active the
+mesh carries Q2 geometric nodes — the images under the circle map of the reference-domain edge
+midpoints and cell centers — and the elements become `QUADRANGLE9` / `EDGE3`. In particular the
+boundary midpoints lie exactly on the circle, so `write_msh` and `get_unstructured_mesh` produce
+a curved, second-order accurate description of the disk.
 
 #### `UnstructuredMesh`
 
@@ -85,7 +113,7 @@ Construction methods:
 
 Writing: `write_msh(path)` writes Gmsh 2.2. If a deformation is attached, the deformed coordinates are written.
 
-Supported element types in `.msh` / `.mesh` files: Edge2, Triangle3, Quadrangle4, Tetrahedron4, Hexahedron8 (P1 elements only for now).
+Supported element types when reading `.msh` files: Edge2, Triangle3, Quadrangle4, Tetrahedron4, Hexahedron8, plus the P2/Q2 elements Edge3, Triangle6, Quadrangle9, Tetrahedron10, Hexahedron27 (node ordering permuted from Gmsh's to the internal convention on read). `.mesh` files: the P1 sections plus `EdgesP2`, `TrianglesP2`, `QuadrilateralsQ2`, `TetrahedraP2` (Medit/libMeshb P2 node ordering, which coincides with the internal one) and `HexahedraQ2` (following the node ordering of the C++ OndoMathX `IO_MESH` writer). Writing: `write_msh` (Gmsh 2.2) applies the inverse permutation for Tetrahedron10/Hexahedron27, so read/write round-trips preserve the node ordering. `write_mesh` writes the ASCII Medit format (readable by Vizir4 and by `new_from_mesh`) with the same sections as the reader, including the P2/Q2 ones; elements are grouped by type into sections, so the global element ordering is not preserved on a round-trip (connectivity and labels are). The dimension is always written as 3 (z = 0 for 2D meshes) and vertex references are 0.
 
 ### `topology`
 
@@ -128,11 +156,11 @@ This produces a conforming global numbering that respects orientation, works for
 ## Quick start
 
 ```rust
-use rouage::mesh::square::*;
-use rouage::mesh::Mesh;
+use anamesh::mesh::square::*;
+use anamesh::mesh::Mesh;
 
 // Structured 3×3 quad mesh on [0,1]²
-let square = Square::new([0.0, 0.0], 1.0, 1.0, 3, 3, None);
+let square = Square::new([0.0, 0.0], 1.0, 1.0, 3, 3, None, None);
 
 // Convert to an UnstructuredMesh (computes topology and coloring)
 let mesh = square.get_unstructured_mesh();
@@ -158,45 +186,6 @@ unstr.write_msh("./output/L_out.msh").unwrap();
 
 ---
 
-## Deformation fields
-
-Deformation fields let you describe curved or non-trivial domains analytically while keeping a simple parametric mesh as the computational backbone.
-
-```rust
-use rouage::deformation_field::DeformationField;
-use rouage::mesh::square::*;
-use rouage::mesh::Mesh;
-
-// Map the unit square to an annulus: (u,v) -> ((1+u)*cos(2π*v), (1+u)*sin(2π*v))
-let annulus = DeformationField {
-    inner_dim: 2,
-    outer_dim: 2,
-    diffeo: |uv, xy| {
-        let r = 1.0 + uv[0];
-        let theta = 2.0 * std::f64::consts::PI * uv[1];
-        xy[0] = r * theta.cos();
-        xy[1] = r * theta.sin();
-    },
-    grad_diffeo: |uv, grad| {
-        // Df applied to grad (chain rule)
-        let theta = 2.0 * std::f64::consts::PI * uv[1];
-        let r = 1.0 + uv[0];
-        let (c, s) = (theta.cos(), theta.sin());
-        let tau = 2.0 * std::f64::consts::PI;
-        let g0 = grad[0];
-        let g1 = grad[1];
-        grad[0] = c * g0 - r * tau * s * g1;
-        grad[1] = s * g0 + r * tau * c * g1;
-    },
-    inner_diffeo: None,
-};
-
-let square = Square::new([0.0, 0.0], 1.0, 1.0, 16, 32, Some(annulus));
-square.write_msh("annulus.msh").unwrap();
-```
-
----
-
 ## Dependencies
 
 | Crate | Use |
@@ -209,7 +198,7 @@ square.write_msh("annulus.msh").unwrap();
 ## Status (2025-05-22)
 
 - P1 elements fully working end-to-end: mesh I/O, topology, coloring, DOF numbering.
-- Q2 (`QUADRANGLE9`) shape functions and DOF set classification implemented; not yet wired into the `.msh` / `.mesh` parsers.
-- `EDGE3` (P2 segment) shape functions available.
+- Q2 (`QUADRANGLE9`, `HEXAHEDRON27`) shape functions and DOF set classification implemented; P2/Q2 elements are read from `.msh` (and `HexahedraQ2` from `.mesh`) and written back to `.msh` with the correct Gmsh node ordering.
+- `EDGE3` (P2 segment), `TRIANGLE6` (P2 triangle), and `TETRAHEDRON10` (P2 tetrahedron) shape functions available.
 - Only Gmsh 2.2 and Medit format reading; writing is Gmsh 2.2 only.
-- Parametric meshes: `Square` only. Circle, cylinder, ball, cube, and other shapes are planned (see [TODO.md](TODO.md)).
+- Parametric meshes: `Square` and `Circle` implemented. Cylinder, ball, cube, and other shapes are planned (see [TODO.md](TODO.md)).

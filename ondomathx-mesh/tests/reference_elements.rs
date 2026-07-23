@@ -1,8 +1,8 @@
-extern crate rouage;
+extern crate anamesh;
 
 #[cfg(test)]
 mod tests {
-    use rouage::reference_elements::*;
+    use anamesh::reference_elements::*;
 
     // === Topology counts ===
 

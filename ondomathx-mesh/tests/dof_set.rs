@@ -1,9 +1,9 @@
-extern crate rouage;
+extern crate anamesh;
 
 #[cfg(test)]
 mod tests {
-    use rouage::dof_set::*;
-    use rouage::reference_elements::*;
+    use anamesh::dof_set::*;
+    use anamesh::reference_elements::*;
 
     #[test]
     fn dof_set_edge_p1() {
@@ -20,11 +20,7 @@ mod tests {
     #[test]
     fn dof_set_edge_p2() {
         // 3 DoFs: vertices + midpoint
-        let pos = vec![
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.5, 0.0, 0.0],
-        ];
+        let pos = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.5, 0.0, 0.0]];
 
         let dof_set = DoFSet::new(pos, &EDGE);
 
@@ -39,11 +35,7 @@ mod tests {
     #[test]
     fn dof_set_triangle_p1() {
         // 3 DoFs at the vertices of the triangle
-        let pos = vec![
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-        ];
+        let pos = vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
 
         let dof_set = DoFSet::new(pos, &TRIANGLE);
 
@@ -65,9 +57,9 @@ mod tests {
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
-            [0.5, 0.0, 0.0],  // mid edge 0
-            [0.5, 0.5, 0.0],  // mid edge 1
-            [0.0, 0.5, 0.0],  // mid edge 2
+            [0.5, 0.0, 0.0], // mid edge 0
+            [0.5, 0.5, 0.0], // mid edge 1
+            [0.0, 0.5, 0.0], // mid edge 2
         ];
 
         let dof_set = DoFSet::new(pos, &TRIANGLE);
@@ -109,11 +101,11 @@ mod tests {
             [1.0, 0.0, 0.0],
             [1.0, 1.0, 0.0],
             [0.0, 1.0, 0.0],
-            [0.5, 0.0, 0.0],  // mid edge 0
-            [1.0, 0.5, 0.0],  // mid edge 1
-            [0.5, 1.0, 0.0],  // mid edge 2
-            [0.0, 0.5, 0.0],  // mid edge 3
-            [0.5, 0.5, 0.0],  // center
+            [0.5, 0.0, 0.0], // mid edge 0
+            [1.0, 0.5, 0.0], // mid edge 1
+            [0.5, 1.0, 0.0], // mid edge 2
+            [0.0, 0.5, 0.0], // mid edge 3
+            [0.5, 0.5, 0.0], // center
         ];
 
         let dof_set = DoFSet::new(pos, &QUADRANGLE);

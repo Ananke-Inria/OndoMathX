@@ -2,25 +2,27 @@
 
 ## P2 / Higher-order finite elements
 
-- [ ] **Triangle6** — P2 Lagrange triangle (6 nodes: 3 vertices + 3 edge midpoints)
-- [ ] **Tetrahedron10** — P2 Lagrange tetrahedron (10 nodes: 4 vertices + 6 edge midpoints)
-- [ ] **Quadrangle9** —  full Q2 quadrilateral
-- [ ] **Hexahedron27** —  full Q2 hexahedron
-- [ ] Wire up P2 elements in `unstructured_mesh.rs` section (currently only P1 elements are parsed: Triangle3, Quadrangle4, Tetrahedron4, Hexahedron8)
-- [ ] Add `.mesh` format support for P2 elements (Gmsh type IDs 9, 11, 16, 17, …)
+- [x] **Triangle6** — P2 Lagrange triangle (6 nodes: 3 vertices + 3 edge midpoints)
+- [x] **Tetrahedron10** — P2 Lagrange tetrahedron (10 nodes: 4 vertices + 6 edge midpoints)
+- [x] **Hexahedron27** —  full Q2 hexahedron
+- [x] Wire up P2 elements in `unstructured_mesh.rs` (reading: Gmsh types 8, 9, 10, 11, 12 with Gmsh→internal node permutations)
+- [x] Add `.mesh` format support for P2 elements (EdgesP2, TrianglesP2, QuadrilateralsQ2, TetrahedraP2, HexahedraQ2)
+- [x] `write_msh`: apply the internal→Gmsh node permutation for Tetrahedron10/Hexahedron27
+- [x] Add a constructor in Circle and Square that outputs Q2 mesh when using write_msh or get_unstructured_mesh (optional `q2` flag on both constructors)
+
 
 ## Parametrized meshes
 
-- [ ] **deformation_fields** — define a clear strategy to use the deformation fields
+- [x] **deformation_fields** — define a clear strategy to use the deformation fields
 
-- [ ] **Circle** — structured mesh of a 2D disk (center, radius, refinement)
+- [x] **Circle** — structured mesh of a 2D disk (center, radius, refinement)
     The idea could be to first create a mesh of a square that it adapted to the future deformation. Then to construct the mesh of the circle by applying the deformation 
 
 
 - [ ] **Cylinder** — 3D cylinder mesh (center, radius, height, refinement)
 - [ ] **Ball / Sphere** — 3D ball mesh (center, radius, refinement)
 - [ ] **Triangle domain** — structured mesh of a 2D triangle
-- [ ] **Annulus** — 2D ring mesh (inner radius, outer radius) ? or use deformation of square with periodicity
+- [ ] **Annulus** — 2D ring mesh (inner radius, outer radius)  
 - [ ] **Cube** — 3D structured hexahedral mesh (extends `Square` to 3D)
 - [ ] **Ventricle** — 3D unstructured hexahedral mesh of a ventricle
 - [ ] **Square and cube** — mesh with tri and tet
@@ -42,7 +44,7 @@
 
 ## Renaming
 
- - [ ] **Change the name ?** - Anamesh ? (analytic mesh) because some meshes are described by analytic functions, Paramesh (parametric mesh)
+ - [x] **Change the name** - Anamesh (analytic mesh) because some meshes are described by analytic functions
 
  ## Algorithms
 

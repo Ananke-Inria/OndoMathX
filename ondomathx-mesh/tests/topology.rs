@@ -1,8 +1,8 @@
-extern crate rouage;
+extern crate anamesh;
 
 #[cfg(test)]
 mod tests {
-    use rouage::topology::*;
+    use anamesh::topology::*;
 
     // === Edge ===
 
