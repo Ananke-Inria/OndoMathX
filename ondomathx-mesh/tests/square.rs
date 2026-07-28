@@ -246,7 +246,12 @@ mod tests {
                 f_xyz[0] = 2.0 * xyz[0];
                 f_xyz[1] = xyz[1];
             },
-            grad_diffeo: |_p, _xyz, _f_xyz| {},
+            grad_diffeo: |_p, _xyz, grad| {
+                grad[0] = 2.0;
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 1.0;
+            },
             inner_deformation: None,
         };
 
@@ -267,7 +272,12 @@ mod tests {
                 f_xyz[0] = 3.0 * xyz[0];
                 f_xyz[1] = xyz[1];
             },
-            grad_diffeo: |_p, _xyz, _f_xyz| {},
+            grad_diffeo: |_p, _xyz, grad| {
+                grad[0] = 3.0;
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 1.0;
+            },
             inner_deformation: None,
         };
 

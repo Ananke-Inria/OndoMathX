@@ -13,7 +13,8 @@ fn optimal_params(n: usize) -> (usize, usize, f64) {
 }
 
 // Maps the reference square [-r_ref, r_ref]² (r_ref = R/√2) to the disk of radius R.
-// params: [radius, cx, cy, alpha].  5 branches: inner square (identity) + 4 arms.
+// params: [radius, cx, cy, alpha].  5 branches: inner square (identity) + 4 arms
+// (O-grid maps: the transverse coordinate drives the angle, see arm_map).
 
 fn circle_selector(p: &[f64], xyz: &[f64]) -> usize {
     let r_ref = p[0] / std::f64::consts::SQRT_2;
@@ -47,45 +48,56 @@ fn circle_inner(_p: &[f64], xyz: &[f64], f_xyz: &mut [f64]) {
     f_xyz[2] = xyz[2];
 }
 
-// Shared radial blend: r_new = r + t*(radius - r), angle preserved.
+// (cos, sin) of the rotation by k·90° that carries the bottom-arm frame to
+// arm k (0 bottom, 1 right, 2 top, 3 left).
+const ARM_ROT: [[f64; 2]; 4] = [[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, -1.0]];
+
+// Shared O-grid arm map, written in the bottom-arm frame (arm k is first
+// rotated into it). On the trapezoid {y ∈ [-r_ref, -a], |x| ≤ |y|} let
+//     t = (|y| - a)/(r_ref - a) ∈ [0, 1],   s = x/|y| ∈ [-1, 1];
+// each center ray s = const is sent to the straight segment joining its
+// inner-square boundary point (s·a, -a) to the circle point at angle
+// θ(s) = -π/2 + s·π/4:
+//     f = (1-t)·(s·a, -a) + t·R·(sin θ, -cos θ).
+// The transverse coordinate s drives the angle, so the Jacobian is nonzero
+// on the whole closed arm — including the two corners where the diagonals
+// meet the circle, where the previous angle-preserving radial blend
+// r_new = r + t·(R - r) was degenerate (zero radial derivative).
 #[inline]
-fn arm_blend(p: &[f64], xyz: &[f64], f_xyz: &mut [f64], t: f64) {
+fn arm_map(p: &[f64], xyz: &[f64], f_xyz: &mut [f64], k: usize) {
+    let r_ref = p[0] / std::f64::consts::SQRT_2;
+    let a = p[3] * r_ref;
+    let [c, sr] = ARM_ROT[k];
+    // Rotate by -k·90° into the bottom-arm frame.
     let lx = xyz[0] - p[1];
     let ly = xyz[1] - p[2];
-    let r = lx.hypot(ly);
-    let r_new = r + t * (p[0] - r);
-    let angle = ly.atan2(lx);
-    f_xyz[0] = r_new * angle.cos() + p[1];
-    f_xyz[1] = r_new * angle.sin() + p[2];
+    let bx = c * lx + sr * ly;
+    let by = -sr * lx + c * ly;
+    let t = (-by - a) / (r_ref - a);
+    let s = -bx / by;
+    let (sin_t, cos_t) = (s * std::f64::consts::FRAC_PI_4).sin_cos();
+    let fx = (1.0 - t) * s * a + t * p[0] * sin_t;
+    let fy = -(1.0 - t) * a - t * p[0] * cos_t;
+    // Rotate back by k·90°.
+    f_xyz[0] = c * fx - sr * fy + p[1];
+    f_xyz[1] = sr * fx + c * fy + p[2];
     f_xyz[2] = xyz[2];
 }
 
 fn circle_bottom(p: &[f64], xyz: &[f64], f_xyz: &mut [f64]) {
-    let r_ref = p[0] / std::f64::consts::SQRT_2;
-    let a = p[3] * r_ref;
-    let t = ((xyz[1] - p[2]).abs() - a) / (r_ref - a);
-    arm_blend(p, xyz, f_xyz, t);
+    arm_map(p, xyz, f_xyz, 0);
 }
 
 fn circle_right(p: &[f64], xyz: &[f64], f_xyz: &mut [f64]) {
-    let r_ref = p[0] / std::f64::consts::SQRT_2;
-    let a = p[3] * r_ref;
-    let t = ((xyz[0] - p[1]) - a) / (r_ref - a);
-    arm_blend(p, xyz, f_xyz, t);
+    arm_map(p, xyz, f_xyz, 1);
 }
 
 fn circle_top(p: &[f64], xyz: &[f64], f_xyz: &mut [f64]) {
-    let r_ref = p[0] / std::f64::consts::SQRT_2;
-    let a = p[3] * r_ref;
-    let t = ((xyz[1] - p[2]) - a) / (r_ref - a);
-    arm_blend(p, xyz, f_xyz, t);
+    arm_map(p, xyz, f_xyz, 2);
 }
 
 fn circle_left(p: &[f64], xyz: &[f64], f_xyz: &mut [f64]) {
-    let r_ref = p[0] / std::f64::consts::SQRT_2;
-    let a = p[3] * r_ref;
-    let t = (-(xyz[0] - p[1]) - a) / (r_ref - a);
-    arm_blend(p, xyz, f_xyz, t);
+    arm_map(p, xyz, f_xyz, 3);
 }
 
 // Gradients of the circle-map branches: write the 2x2 Jacobian of the branch
@@ -98,56 +110,68 @@ fn circle_inner_grad(_p: &[f64], _xyz: &[f64], grad: &mut [f64]) {
     grad[3] = 1.0;
 }
 
-// Jacobian of arm_blend: f = c + r_new·e_θ with r_new = r + t·(R - r) and
-// t an affine function of position with (constant) gradient `dt`.
-// ∇r_new = (1-t)·∇r + (R-r)·∇t,  ∇r = e_r,  ∇θ = e_θ/r.
+// Jacobian of arm_map: with f = (1-t)·p_in(s) + t·p_out(s),
+//   ∂f/∂t = p_out - p_in,   ∂f/∂s = (1-t)·(a, 0) + t·R·(π/4)·(cos θ, sin θ),
+//   ∂t/∂by = -1/(r_ref - a),   ∂s/∂bx = -1/by,   ∂s/∂by = bx/by²,
+// conjugated by the frame rotation: G = Rk · B · Rkᵀ.
 #[inline]
-fn arm_blend_grad(p: &[f64], xyz: &[f64], grad: &mut [f64], t: f64, dt: [f64; 2]) {
+fn arm_map_grad(p: &[f64], xyz: &[f64], grad: &mut [f64], k: usize) {
+    let r_ref = p[0] / std::f64::consts::SQRT_2;
+    let a = p[3] * r_ref;
+    let [c, sr] = ARM_ROT[k];
     let lx = xyz[0] - p[1];
     let ly = xyz[1] - p[2];
-    let r = lx.hypot(ly);
-    let r_new = r + t * (p[0] - r);
-    let cos_t = lx / r;
-    let sin_t = ly / r;
+    let bx = c * lx + sr * ly;
+    let by = -sr * lx + c * ly;
+    let t = (-by - a) / (r_ref - a);
+    let s = -bx / by;
+    let (sin_t, cos_t) = (s * std::f64::consts::FRAC_PI_4).sin_cos();
 
-    let dr_new = [
-        (1.0 - t) * cos_t + (p[0] - r) * dt[0],
-        (1.0 - t) * sin_t + (p[0] - r) * dt[1],
+    let dt_dby = -1.0 / (r_ref - a);
+    let ds_dbx = -1.0 / by;
+    let ds_dby = bx / (by * by);
+
+    let df_dt = [p[0] * sin_t - s * a, a - p[0] * cos_t];
+    let df_ds = [
+        (1.0 - t) * a + t * p[0] * std::f64::consts::FRAC_PI_4 * cos_t,
+        t * p[0] * std::f64::consts::FRAC_PI_4 * sin_t,
     ];
-    let dtheta = [-sin_t / r, cos_t / r];
 
-    grad[0] = cos_t * dr_new[0] - r_new * sin_t * dtheta[0];
-    grad[1] = cos_t * dr_new[1] - r_new * sin_t * dtheta[1];
-    grad[2] = sin_t * dr_new[0] + r_new * cos_t * dtheta[0];
-    grad[3] = sin_t * dr_new[1] + r_new * cos_t * dtheta[1];
+    // Jacobian in the bottom-arm frame.
+    let b = [
+        df_ds[0] * ds_dbx,
+        df_dt[0] * dt_dby + df_ds[0] * ds_dby,
+        df_ds[1] * ds_dbx,
+        df_dt[1] * dt_dby + df_ds[1] * ds_dby,
+    ];
+
+    // G = Rk · B · Rkᵀ with Rk = [[c, -sr], [sr, c]].
+    let brt = [
+        b[0] * c - b[1] * sr,
+        b[0] * sr + b[1] * c,
+        b[2] * c - b[3] * sr,
+        b[2] * sr + b[3] * c,
+    ];
+    grad[0] = c * brt[0] - sr * brt[2];
+    grad[1] = c * brt[1] - sr * brt[3];
+    grad[2] = sr * brt[0] + c * brt[2];
+    grad[3] = sr * brt[1] + c * brt[3];
 }
 
 fn circle_bottom_grad(p: &[f64], xyz: &[f64], grad: &mut [f64]) {
-    let r_ref = p[0] / std::f64::consts::SQRT_2;
-    let a = p[3] * r_ref;
-    let t = ((xyz[1] - p[2]).abs() - a) / (r_ref - a);
-    arm_blend_grad(p, xyz, grad, t, [0.0, -1.0 / (r_ref - a)]);
+    arm_map_grad(p, xyz, grad, 0);
 }
 
 fn circle_right_grad(p: &[f64], xyz: &[f64], grad: &mut [f64]) {
-    let r_ref = p[0] / std::f64::consts::SQRT_2;
-    let a = p[3] * r_ref;
-    let t = ((xyz[0] - p[1]) - a) / (r_ref - a);
-    arm_blend_grad(p, xyz, grad, t, [1.0 / (r_ref - a), 0.0]);
+    arm_map_grad(p, xyz, grad, 1);
 }
 
 fn circle_top_grad(p: &[f64], xyz: &[f64], grad: &mut [f64]) {
-    let r_ref = p[0] / std::f64::consts::SQRT_2;
-    let a = p[3] * r_ref;
-    let t = ((xyz[1] - p[2]) - a) / (r_ref - a);
-    arm_blend_grad(p, xyz, grad, t, [0.0, 1.0 / (r_ref - a)]);
+    arm_map_grad(p, xyz, grad, 2);
 }
 
 fn circle_left_grad(p: &[f64], xyz: &[f64], grad: &mut [f64]) {
-    let r_ref = p[0] / std::f64::consts::SQRT_2;
-    let a = p[3] * r_ref;
-    let t = (-(xyz[0] - p[1]) - a) / (r_ref - a);
-    arm_blend_grad(p, xyz, grad, t, [-1.0 / (r_ref - a), 0.0]);
+    arm_map_grad(p, xyz, grad, 3);
 }
 
 /// Structured quad mesh of a 2D disk of radius `R`.
@@ -396,10 +420,9 @@ impl Circle {
             let i_rho = i_rel / self.n_theta + 1; // 1-indexed
             let i_quarter = i_theta / self.n_x;
             let i_x = i_theta % self.n_x;
-            let s = i_rho as f64 / self.n_rho as f64;
-            // Pre-warp: t_rho = 1 − √(1−s) ensures diagonal points are uniformly
-            // spaced in the radial direction after circle_map.
-            let t_rho = 1.0 - (1.0 - s).sqrt();
+            // The arm map is affine along each center ray, so uniform t_rho
+            // gives uniformly spaced ring layers.
+            let t_rho = i_rho as f64 / self.n_rho as f64;
             let t_x = i_x as f64 / self.n_x as f64;
             self.arm_ref_coord(t_x, t_rho, i_quarter)
         };
@@ -666,12 +689,12 @@ impl Mesh for Circle {
         }
     }
 
-    // Jacobian of the analytic element map F = circle_map ∘ Q, where Q is the
+    // Writes the Jacobian of the analytic element map F = circle_map ∘ Q
+    // (composed with the attached deformation if any), where Q is the
     // bilinear map from the reference element to the element's cell in the
     // reference (square+arms) domain, through the pre-circle_map corners.
-    // J = D(circle_map)|_{Q(uvw)} · J_Q, composed into grad_def by in-place
-    // right multiplication (same convention as Square: pass the identity to
-    // recover J itself).
+    // J = D(circle_map)|_{Q(uvw)} · J_Q, row-major: 2×2 for the cells,
+    // 2×1 (the tangent) for the boundary edges.
     fn get_element_grad_def(&self, element_index: usize, uvw: &[f64], grad_def: &mut [f64]) {
         debug_assert!(element_index < self.get_nelements());
         let n_vol = self.n_square_elem + self.n_rho * self.n_theta;
@@ -747,20 +770,26 @@ impl Mesh for Circle {
             _ => unreachable!(),
         }
 
-        // J = D · [dq_du | dq_dv], row-major.
-        let j = [
-            d[0] * dq_du[0] + d[1] * dq_du[1],
-            d[0] * dq_dv[0] + d[1] * dq_dv[1],
-            d[2] * dq_du[0] + d[3] * dq_du[1],
-            d[2] * dq_dv[0] + d[3] * dq_dv[1],
-        ];
+        // J = D · [dq_du | dq_dv], row-major: 2×2 for the cells, 2×1 (the
+        // tangent) for the boundary edges.
+        let elem_dim;
+        if corners.len() == 4 {
+            elem_dim = 2;
+            grad_def[0] = d[0] * dq_du[0] + d[1] * dq_du[1];
+            grad_def[1] = d[0] * dq_dv[0] + d[1] * dq_dv[1];
+            grad_def[2] = d[2] * dq_du[0] + d[3] * dq_du[1];
+            grad_def[3] = d[2] * dq_dv[0] + d[3] * dq_dv[1];
+        } else {
+            elem_dim = 1;
+            grad_def[0] = d[0] * dq_du[0] + d[1] * dq_du[1];
+            grad_def[1] = d[2] * dq_du[0] + d[3] * dq_du[1];
+        }
 
-        // grad_def <- grad_def · J
-        let (g0, g1, g2, g3) = (grad_def[0], grad_def[1], grad_def[2], grad_def[3]);
-        grad_def[0] = g0 * j[0] + g1 * j[2];
-        grad_def[1] = g0 * j[1] + g1 * j[3];
-        grad_def[2] = g2 * j[0] + g3 * j[2];
-        grad_def[3] = g2 * j[1] + g3 * j[3];
+        //Chain rule with the attached deformation: grad_def ← Df(xyz)·grad_def,
+        //where xyz = circle_map(Q(uvw)) is the physical (disk) image of uvw.
+        if let Some(deformation) = &self.deformation {
+            deformation.compose_grad_def(&self.circle_map(q), grad_def, elem_dim);
+        }
     }
 
     fn get_ncolors(&self) -> usize {
@@ -832,23 +861,28 @@ mod tests {
                 };
 
                 // Interior points (the FD stencil must stay inside the element,
-                // where the analytic map is smooth).
+                // where the analytic map is smooth). The Jacobian is 2×2 for
+                // the cells and 2×1 (the tangent) for the boundary edges.
                 for &(u, v) in &[(0.3, 0.7), (0.5, 0.5), (0.05, 0.9)] {
-                    let mut grad = [1.0, 0.0, 0.0, 1.0];
+                    let mut grad = [0.0; 4];
                     c.get_element_grad_def(el, &[u, v, 0.0], &mut grad);
 
                     let (fu1, fu0) = (f(u + h, v), f(u - h, v));
-                    let (fv1, fv0) = (f(u, v + h), f(u, v - h));
-                    let fd = [
-                        (fu1[0] - fu0[0]) / (2.0 * h),
-                        (fv1[0] - fv0[0]) / (2.0 * h),
-                        (fu1[1] - fu0[1]) / (2.0 * h),
-                        (fv1[1] - fv0[1]) / (2.0 * h),
-                    ];
+                    let fd: Vec<f64> = if corners.len() == 4 {
+                        let (fv1, fv0) = (f(u, v + h), f(u, v - h));
+                        vec![
+                            (fu1[0] - fu0[0]) / (2.0 * h),
+                            (fv1[0] - fv0[0]) / (2.0 * h),
+                            (fu1[1] - fu0[1]) / (2.0 * h),
+                            (fv1[1] - fv0[1]) / (2.0 * h),
+                        ]
+                    } else {
+                        vec![(fu1[0] - fu0[0]) / (2.0 * h), (fu1[1] - fu0[1]) / (2.0 * h)]
+                    };
 
-                    for k in 0..4 {
+                    for (k, fd_k) in fd.iter().enumerate() {
                         assert!(
-                            (grad[k] - fd[k]).abs() < 1e-5 * (1.0 + fd[k].abs()),
+                            (grad[k] - fd_k).abs() < 1e-5 * (1.0 + fd_k.abs()),
                             "n={} element {} at ({},{}): grad[{}]={} but FD gives {}",
                             n,
                             el,
@@ -856,7 +890,7 @@ mod tests {
                             v,
                             k,
                             grad[k],
-                            fd[k]
+                            fd_k
                         );
                     }
                 }
@@ -886,9 +920,10 @@ mod tests {
                 // The mapped point lies on the boundary circle
                 assert!((rx.hypot(ry) - c.radius).abs() < 1e-12);
 
-                let mut grad = [1.0, 0.0, 0.0, 1.0];
+                //Boundary edges yield the 2×1 tangent [∂x/∂u, ∂y/∂u].
+                let mut grad = [0.0; 2];
                 c.get_element_grad_def(el, &[u, 0.0, 0.0], &mut grad);
-                let (tx, ty) = (grad[0], grad[2]);
+                let (tx, ty) = (grad[0], grad[1]);
                 let radial = (rx * tx + ry * ty) / (c.radius * tx.hypot(ty));
                 assert!(
                     radial.abs() < 1e-10,

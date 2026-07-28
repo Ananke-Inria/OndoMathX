@@ -9,9 +9,10 @@ mod tests {
     fn unstructured_mesh_from_msh() {
         let mesh = UnstructuredMesh::new_from_msh("./assets/Potatoe.msh").unwrap();
 
-        // Potatoe.msh has 901 nodes and 951 elements (135 edges + 816 quads)
+        // Potatoe.msh has 901 nodes and 932 elements (116 edges + 816 quads;
+        // its 12 point elements are skipped by the reader)
         assert_eq!(mesh.get_nnodes(), 901);
-        assert_eq!(mesh.get_nelements(), 951);
+        assert_eq!(mesh.get_nelements(), 932);
 
         // It is a 2D mesh
         assert_eq!(mesh.get_geometric_dimension(), 2);
@@ -20,7 +21,7 @@ mod tests {
         // Check element counts per dimension
         let edges = mesh.get_elements_by_dimension(1);
         let faces = mesh.get_elements_by_dimension(2);
-        assert_eq!(edges.len(), 135);
+        assert_eq!(edges.len(), 116);
         assert_eq!(faces.len(), 816);
         assert_eq!(edges.len() + faces.len(), mesh.get_nelements());
     }
@@ -30,8 +31,8 @@ mod tests {
         let mesh = UnstructuredMesh::new_from_msh("./assets/Potatoe.msh").unwrap();
 
         // Expected counts for Potatoe.msh
-        assert_eq!(mesh.get_nvertexes(), 893);
-        assert_eq!(mesh.get_nedges(), 1709);
+        assert_eq!(mesh.get_nvertexes(), 875);
+        assert_eq!(mesh.get_nedges(), 1690);
 
         // Every quad element must have exactly 4 vertices and 4 edges
         let faces = mesh.get_elements_by_dimension(2);
@@ -307,7 +308,7 @@ $EndElements\n";
         assert_element_nodes(&mesh, 0, &HEX27_INTERNAL, "hexahedron27 (.msh)");
     }
 
-    // A single HexahedraQ2 in the Medit .mesh convention of the C++ IO_MESH
+    // A single HexahedraQ2 in the Medit .mesh convention
     // writer: vertices, bottom edge ring, top edge ring, vertical edges,
     // face centers (bottom, top, front, right, back, left), center.
     #[test]
@@ -495,7 +496,7 @@ $EndElements\n";
 
     // write_mesh (Medit/Vizir output): the high-order node orderings survive
     // a write + reread (TetrahedraP2 is the identity, HexahedraQ2 goes
-    // through the C++ IO_MESH permutation and back).
+    // through the an index permutation and back).
     #[test]
     fn write_mesh_high_order_roundtrip() {
         use anamesh::geometric_elements::{HEXAHEDRON27, TETRAHEDRON10};
@@ -785,5 +786,36 @@ $EndElements\n";
                 );
             }
         }
+    }
+
+    // A lower-dimensional element that is not the trace of any volume element
+    // (here the diagonal of a quad) must be rejected at construction.
+    #[test]
+    #[should_panic(expected = "dangling")]
+    fn dangling_element_panics_at_construction() {
+        use anamesh::geometric_elements::{EDGE2, QUADRANGLE4};
+        use anamesh::mesh::MeshElement;
+
+        let nodes = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ];
+
+        let elements = vec![
+            MeshElement {
+                geometric_element: &QUADRANGLE4,
+                label: 0,
+                indexes: vec![0, 1, 2, 3],
+            },
+            MeshElement {
+                geometric_element: &EDGE2,
+                label: 1,
+                indexes: vec![0, 2],
+            },
+        ];
+
+        UnstructuredMesh::new_from_points_and_elements(nodes, elements, None);
     }
 }

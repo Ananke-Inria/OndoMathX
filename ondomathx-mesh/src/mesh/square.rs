@@ -401,13 +401,77 @@ impl Mesh for Square {
 
         gey * self.nx + gex
     }
-    fn get_element_grad_def(&self, _element_index: usize, _uvw: &[f64], grad_def: &mut [f64]) {
+    //Writes the Jacobian of the analytic element map (composed with the
+    //attached deformation if any), row-major: the cells are axis-aligned
+    //rectangles so the undeformed Jacobian is exactly diag(hx, hy) (2×2);
+    //the boundary edges are axis-aligned segments with tangent ±hx or ±hy
+    //(2×1) — the top (label 2) and left (label 3) groups run reversed, per
+    //the node ordering of get_element.
+    fn get_element_grad_def(&self, element_index: usize, uvw: &[f64], grad_def: &mut [f64]) {
+        debug_assert!(
+            element_index < self.get_nelements(),
+            "Element index out of bounds"
+        );
+
         let hx = self.lx / self.nx as f64;
         let hy = self.ly / self.ny as f64;
+        let n_vol = self.nx * self.ny;
 
-        grad_def[0] *= hx;
-        grad_def[1] *= hy;
-        grad_def[2] *= hx;
-        grad_def[3] *= hy;
+        //Undeformed Jacobian and (if a deformation is attached) the physical
+        //image of uvw under the undeformed element map.
+        let elem_dim;
+        let mut xyz = [0.0; 3];
+
+        if element_index < n_vol {
+            //Cell (i, j): x(u,v) = origin + ((i+u)·hx, (j+v)·hy)
+            elem_dim = 2;
+            grad_def[0] = hx;
+            grad_def[1] = 0.0;
+            grad_def[2] = 0.0;
+            grad_def[3] = hy;
+
+            let i = element_index % self.nx;
+            let j = element_index / self.nx;
+            xyz[0] = self.origin[0] + (i as f64 + uvw[0]) * hx;
+            xyz[1] = self.origin[1] + (j as f64 + uvw[1]) * hy;
+        } else {
+            elem_dim = 1;
+            let u = uvw[0];
+
+            if element_index < n_vol + self.nx {
+                //Bottom (label 0): x(u) = origin + ((i+u)·hx, 0)
+                let i = element_index - n_vol;
+                grad_def[0] = hx;
+                grad_def[1] = 0.0;
+                xyz[0] = self.origin[0] + (i as f64 + u) * hx;
+                xyz[1] = self.origin[1];
+            } else if element_index < n_vol + self.nx + self.ny {
+                //Right (label 1): x(u) = origin + (lx, (j+u)·hy)
+                let j = element_index - (n_vol + self.nx);
+                grad_def[0] = 0.0;
+                grad_def[1] = hy;
+                xyz[0] = self.origin[0] + self.lx;
+                xyz[1] = self.origin[1] + (j as f64 + u) * hy;
+            } else if element_index < n_vol + 2 * self.nx + self.ny {
+                //Top (label 2), reversed: x(u) = origin + ((i+1-u)·hx, ly)
+                let i = (self.nx - 1) - (element_index - (n_vol + self.nx + self.ny));
+                grad_def[0] = -hx;
+                grad_def[1] = 0.0;
+                xyz[0] = self.origin[0] + (i as f64 + 1.0 - u) * hx;
+                xyz[1] = self.origin[1] + self.ly;
+            } else {
+                //Left (label 3), reversed: x(u) = origin + (0, (j+1-u)·hy)
+                let j = (self.ny - 1) - (element_index - (n_vol + 2 * self.nx + self.ny));
+                grad_def[0] = 0.0;
+                grad_def[1] = -hy;
+                xyz[0] = self.origin[0];
+                xyz[1] = self.origin[1] + (j as f64 + 1.0 - u) * hy;
+            }
+        }
+
+        //Chain rule with the attached deformation: grad_def ← Df(xyz)·grad_def.
+        if let Some(deformation) = &self.deformation {
+            deformation.compose_grad_def(&xyz, grad_def, elem_dim);
+        }
     }
 }

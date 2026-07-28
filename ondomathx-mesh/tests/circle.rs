@@ -242,7 +242,7 @@ mod tests {
     }
 
     // Outer corners of each arm are at (±r_ref, ±r_ref);
-    // inner corner of bottom arm is at (-w, -w) with pre-warp applied.
+    // inner corner of bottom arm is at (-w, -w), one uniform layer out.
     #[test]
     fn arm_bilinear_corners() {
         let radius = 4.0;
@@ -276,8 +276,9 @@ mod tests {
             );
         }
 
-        // Inner corner of bottom arm (i_rho=1, i_x=0):
-        // circle_map sends (-w,-w) to (r_ref·cos(-3π/4), r_ref·sin(-3π/4)) = (-R/2, -R/2).
+        // Inner corner of bottom arm (i_rho=1, i_x=0): the diagonal ray blends
+        // (-a,-a) to (-R/√2,-R/√2) at t=1/2, and a = R - R/√2 for n=6,
+        // so circle_map sends (-w,-w) to -(a + R/√2)/2·(1,1) = (-R/2, -R/2).
         let ex2 = -radius / 2.0;
         let ey2 = -radius / 2.0;
         let [x2, y2, _] = c.get_node(nv);
@@ -388,7 +389,7 @@ mod tests {
         let h = 2.0 * c.alpha * r_ref / c.n_x as f64;
 
         for el in 0..c.n_x * c.n_x {
-            let mut grad = [1.0, 0.0, 0.0, 1.0];
+            let mut grad = [0.0; 4];
             c.get_element_grad_def(el, &[0.3, 0.6, 0.0], &mut grad);
             assert!((grad[0] - h).abs() < 1e-12, "el {}: {:?}", el, grad);
             assert!(grad[1].abs() < 1e-12, "el {}: {:?}", el, grad);
@@ -410,7 +411,7 @@ mod tests {
             for el in c.get_elements_by_dimension(2) {
                 for &u in &pts {
                     for &v in &pts {
-                        let mut grad = [1.0, 0.0, 0.0, 1.0];
+                        let mut grad = [0.0; 4];
                         c.get_element_grad_def(el, &[u, v, 0.0], &mut grad);
                         let det = grad[0] * grad[3] - grad[1] * grad[2];
                         assert!(
@@ -444,7 +445,7 @@ mod tests {
             for el in c.get_elements_by_dimension(2) {
                 for (i, &u) in pts.iter().enumerate() {
                     for (j, &v) in pts.iter().enumerate() {
-                        let mut grad = [1.0, 0.0, 0.0, 1.0];
+                        let mut grad = [0.0; 4];
                         c.get_element_grad_def(el, &[u, v, 0.0], &mut grad);
                         let det = grad[0] * grad[3] - grad[1] * grad[2];
                         area += wts[i] * wts[j] * det;

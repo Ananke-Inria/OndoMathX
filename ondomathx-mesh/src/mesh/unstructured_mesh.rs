@@ -147,57 +147,36 @@ impl Mesh for UnstructuredMesh {
     fn get_element_grad_def(&self, e: usize, uvw: &[f64], grad_def: &mut [f64]) {
         let element = &self.elements[e];
         let geo_element = element.geometric_element;
+        let elem_dim = geo_element.reference_element.get_dim();
+        let geo_dim = self.geometric_dimension;
 
+        //Jacobian of the isoparametric map, geo_dim × elem_dim row-major.
+        grad_def[..geo_dim * elem_dim].fill(0.0);
+
+        //Physical image of uvw, needed to evaluate the deformation Jacobian.
         let mut xyz = [0.0; 3];
 
         for i in 0..geo_element.nshape_functions {
-            let inode = element.indexes[i];
-            let node = &self.nodes[inode];
+            let node = &self.nodes[element.indexes[i]];
             let d = geo_element.d_shape_functions[i](uvw);
 
             if self.deformation.is_some() {
                 let p = geo_element.shape_functions[i](uvw);
-
-                if self.geometric_dimension == 3 {
-                    xyz[0] += node[0] * p;
-                    xyz[1] += node[1] * p;
-                    xyz[2] += node[2] * p;
-                } else if self.geometric_dimension == 2 {
-                    xyz[0] += node[0] * p;
-                    xyz[1] += node[1] * p;
-                } else if self.geometric_dimension == 1 {
-                    xyz[0] += node[0] * p;
+                for a in 0..geo_dim {
+                    xyz[a] += node[a] * p;
                 }
             }
 
-            if self.geometric_dimension == 3 && self.topologic_dimension == 3 {
-                grad_def[0] += node[0] * d[0];
-                grad_def[1] += node[0] * d[1];
-                grad_def[2] += node[0] * d[2];
-
-                grad_def[3] += node[1] * d[0];
-                grad_def[4] += node[1] * d[1];
-                grad_def[5] += node[1] * d[2];
-
-                grad_def[6] += node[2] * d[0];
-                grad_def[7] += node[2] * d[1];
-                grad_def[8] += node[2] * d[2];
-            } else if self.geometric_dimension == 2 && self.topologic_dimension == 2 {
-                grad_def[0] += node[0] * d[0];
-                grad_def[1] += node[0] * d[1];
-
-                grad_def[2] += node[1] * d[0];
-                grad_def[3] += node[1] * d[1];
-            } else if self.geometric_dimension == 3 && self.topologic_dimension == 2 {
-                grad_def[0] += node[0] * d[0];
-                grad_def[1] += node[0] * d[1];
-
-                grad_def[2] += node[1] * d[0];
-                grad_def[3] += node[1] * d[1];
-
-                grad_def[4] += node[2] * d[0];
-                grad_def[5] += node[2] * d[1];
+            for a in 0..geo_dim {
+                for b in 0..elem_dim {
+                    grad_def[a * elem_dim + b] += node[a] * d[b];
+                }
             }
+        }
+
+        //Chain rule with the attached deformation: grad_def ← Df(xyz)·grad_def.
+        if let Some(deformation) = &self.deformation {
+            deformation.compose_grad_def(&xyz, grad_def, elem_dim);
         }
     }
 }
@@ -471,6 +450,29 @@ impl UnstructuredMesh {
         }
     }
 
+    //Every lower-dimensional element must be the trace (edge/face) of an
+    //element of the highest topological dimension: the DOF numbering, the
+    //boundary model and refinement all rely on this invariant, so a dangling
+    //element (e.g. a geometry polyline meshed at a different resolution than
+    //the cells) is rejected loudly at construction.
+    fn check_dangling_elements(&self) {
+        for d in 1..self.topologic_dimension {
+            for &el in self.elements_by_dim[d].iter() {
+                let dangling = if d == 1 {
+                    self.edges_neighbour[self.neighbour_edges[el][0]].is_empty()
+                } else {
+                    self.faces_neighbour[self.neighbour_faces[el][0]].is_empty()
+                };
+
+                assert!(
+                    !dangling,
+                    "Element {el} of dimension {d} is dangling: it is not the trace of any element of dimension {}",
+                    self.topologic_dimension
+                );
+            }
+        }
+    }
+
     pub fn compute_graph(&self) -> Vec<Vec<usize>> {
         let nelements = self.elements_by_dim[self.topologic_dimension].len();
 
@@ -557,6 +559,7 @@ impl UnstructuredMesh {
         mesh.compute_dimension();
         mesh.compute_indexing();
         mesh.compute_topology();
+        mesh.check_dangling_elements();
         mesh.compute_coloring();
 
         mesh
@@ -605,8 +608,7 @@ impl UnstructuredMesh {
 
         let mut elements: Vec<MeshElement> = Vec::new();
 
-        //Medit "HexahedraQ2" section (convention of the C++ OndoMathX IO_MESH
-        //writer): 8 vertices, bottom edge ring (m01, m12, m23, m03), top edge
+        //Medit "HexahedraQ2" section: 8 vertices, bottom edge ring (m01, m12, m23, m03), top edge
         //ring (m45, m56, m67, m47), vertical edges (m04, m15, m26, m37), face
         //centers (bottom, top, front, right, back, left), center.
         //Internal position i is read from file position PERM[i].
@@ -679,12 +681,21 @@ impl UnstructuredMesh {
             .map(|line_res| line_res.unwrap())
             .skip_while(|line| line != "$MeshFormat")
             .skip(1);
+        //All 2.x versions share the same ASCII $Nodes/$Elements structure
+        //(the writer always emits 2.2).
         let version_line = lines.next().expect("Missing $MeshFormat section");
-        let version: &str = version_line.split(' ').next().unwrap();
+        let mut fields = version_line.split(' ');
+        let version = fields.next().unwrap();
+        let file_type = fields.next().unwrap_or("0");
         assert!(
-            version == "2.2",
-            "Only Gmsh format 2.2 is supported, found {}",
+            version == "2" || version.starts_with("2."),
+            "Only Gmsh format 2.x is supported, found {}",
             version
+        );
+        assert!(
+            file_type == "0",
+            "Only ASCII Gmsh files are supported, found file-type {}",
+            file_type
         );
 
         let points = UnstructuredMesh::read_points_from_msh(path)?;

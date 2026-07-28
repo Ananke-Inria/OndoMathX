@@ -1,5 +1,8 @@
 extern crate anamesh;
 
+//grad_diffeo contract: WRITE the Jacobian Df(xyz), row-major
+//outer_dim × inner_dim (never read the previous content of the buffer);
+//chain-rule products are performed by the library in grad_eval.
 #[cfg(test)]
 mod tests {
     use anamesh::diffeomorphism::*;
@@ -14,7 +17,12 @@ mod tests {
                 f_xyz[0] = xyz[0];
                 f_xyz[1] = xyz[1];
             },
-            grad_diffeo: |_p, _xyz, _grad| {},
+            grad_diffeo: |_p, _xyz, grad| {
+                grad[0] = 1.0;
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 1.0;
+            },
             inner_deformation: None,
         };
 
@@ -38,8 +46,10 @@ mod tests {
                 f_xyz[1] = 3.0 * xyz[1];
             },
             grad_diffeo: |_p, _xyz, grad| {
-                grad[0] *= 2.0;
-                grad[1] *= 3.0;
+                grad[0] = 2.0;
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 3.0;
             },
             inner_deformation: None,
         };
@@ -64,8 +74,10 @@ mod tests {
                 f_xyz[1] = p[1] * xyz[1];
             },
             grad_diffeo: |p, _xyz, grad| {
-                grad[0] *= p[0];
-                grad[1] *= p[1];
+                grad[0] = p[0];
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = p[1];
             },
             inner_deformation: None,
         };
@@ -91,7 +103,10 @@ mod tests {
                 f_xyz[1] = xyz[1];
             },
             grad_diffeo: |_p, _xyz, grad| {
-                grad[0] *= 2.0;
+                grad[0] = 2.0;
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 1.0;
             },
             inner_deformation: None,
         };
@@ -105,7 +120,12 @@ mod tests {
                 f_xyz[0] = xyz[0] + 1.0;
                 f_xyz[1] = xyz[1] + 1.0;
             },
-            grad_diffeo: |_p, _xyz, _grad| {},
+            grad_diffeo: |_p, _xyz, grad| {
+                grad[0] = 1.0;
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 1.0;
+            },
             inner_deformation: None,
         };
 
@@ -133,7 +153,10 @@ mod tests {
                 f_xyz[1] = xyz[1];
             },
             grad_diffeo: |_p, xyz, grad| {
-                grad[0] *= 2.0 * xyz[0];
+                grad[0] = 2.0 * xyz[0];
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 1.0;
             },
             inner_deformation: None,
         };
@@ -147,7 +170,12 @@ mod tests {
                 f_xyz[0] = xyz[0] + 10.0;
                 f_xyz[1] = xyz[1] + 10.0;
             },
-            grad_diffeo: |_p, _xyz, _grad| {},
+            grad_diffeo: |_p, _xyz, grad| {
+                grad[0] = 1.0;
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 1.0;
+            },
             inner_deformation: Some(Box::new(inner)),
         };
 
@@ -171,7 +199,9 @@ mod tests {
                 f_xyz[1] = xyz[1];
                 f_xyz[2] = xyz[2] + 1.0;
             },
-            grad_diffeo: |_p, _xyz, _grad| {},
+            grad_diffeo: |_p, _xyz, grad| {
+                grad.copy_from_slice(&[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+            },
             inner_deformation: None,
         };
 
@@ -200,9 +230,10 @@ mod tests {
             grad_diffeo: |_p, _xyz, grad| {
                 let c = 0.5;
                 let s = 3.0_f64.sqrt() / 2.0;
-                let (g0, g1) = (grad[0], grad[1]);
-                grad[0] = c * g0 - s * g1;
-                grad[1] = s * g0 + c * g1;
+                grad[0] = c;
+                grad[1] = -s;
+                grad[2] = s;
+                grad[3] = c;
             },
             inner_deformation: None,
         };
@@ -231,9 +262,10 @@ mod tests {
             },
             grad_diffeo: |_p, xyz, grad| {
                 let (r, theta) = (xyz[0], xyz[1]);
-                let (g0, g1) = (grad[0], grad[1]);
-                grad[0] = theta.cos() * g0 - r * theta.sin() * g1;
-                grad[1] = theta.sin() * g0 + r * theta.cos() * g1;
+                grad[0] = theta.cos();
+                grad[1] = -r * theta.sin();
+                grad[2] = theta.sin();
+                grad[3] = r * theta.cos();
             },
             inner_deformation: None,
         };
@@ -260,10 +292,7 @@ mod tests {
             },
             grad_diffeo: |_p, xyz, grad| {
                 let (x, y, z) = (xyz[0], xyz[1], xyz[2]);
-                let (g0, g1, g2) = (grad[0], grad[1], grad[2]);
-                grad[0] = y * g0 + x * g1;
-                grad[1] = z * g1 + y * g2;
-                grad[2] = z * g0 + x * g2;
+                grad.copy_from_slice(&[y, x, 0.0, 0.0, z, y, z, 0.0, x]);
             },
             inner_deformation: None,
         };
@@ -290,7 +319,10 @@ mod tests {
                 f_xyz[1] = xyz[1];
             },
             grad_diffeo: |_p, xyz, grad| {
-                grad[0] += 2.0 * xyz[1] * grad[1];
+                grad[0] = 1.0;
+                grad[1] = 2.0 * xyz[1];
+                grad[2] = 0.0;
+                grad[3] = 1.0;
             },
             inner_deformation: None,
         };
@@ -306,9 +338,10 @@ mod tests {
             },
             grad_diffeo: |_p, xyz, grad| {
                 let (u, v) = (xyz[0], xyz[1]);
-                let (g0, g1) = (grad[0], grad[1]);
-                grad[0] = v * g0 + u * g1;
-                grad[1] = 2.0 * u * g0 - g1;
+                grad[0] = v;
+                grad[1] = u;
+                grad[2] = 2.0 * u;
+                grad[3] = -1.0;
             },
             inner_deformation: None,
         };
@@ -338,10 +371,7 @@ mod tests {
             },
             grad_diffeo: |_p, xyz, grad| {
                 let (x, y, _z) = (xyz[0], xyz[1], xyz[2]);
-                let (g0, g1, g2) = (grad[0], grad[1], grad[2]);
-                grad[0] = y * g0 + x * g1;
-                grad[1] = g1 + g2;
-                grad[2] = g0 - g2;
+                grad.copy_from_slice(&[y, x, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, -1.0]);
             },
             inner_deformation: None,
         };
@@ -358,10 +388,7 @@ mod tests {
             },
             grad_diffeo: |_p, xyz, grad| {
                 let (u, v, w) = (xyz[0], xyz[1], xyz[2]);
-                let (g0, g1, g2) = (grad[0], grad[1], grad[2]);
-                grad[0] = 2.0 * u * g0 + g1;
-                grad[1] = w * g1 + v * g2;
-                grad[2] = g0 + 2.0 * w * g2;
+                grad.copy_from_slice(&[2.0 * u, 1.0, 0.0, 0.0, w, v, 1.0, 0.0, 2.0 * w]);
             },
             inner_deformation: None,
         };
@@ -376,5 +403,51 @@ mod tests {
         assert!((output[1] - 4.0).abs() < 1e-12);
         assert!((output[2] - 7.0).abs() < 1e-12);
         assert!(outer.test_grad(&input, None, None));
+    }
+
+    // === compose_grad_def ===
+
+    fn scaling() -> Diffeomorphism {
+        // f(x, y) = (2x, 3y), Df = [[2, 0], [0, 3]]
+        Diffeomorphism {
+            inner_dim: 2,
+            outer_dim: 2,
+            params: vec![],
+            diffeo: |_p, xyz, f_xyz| {
+                f_xyz[0] = 2.0 * xyz[0];
+                f_xyz[1] = 3.0 * xyz[1];
+            },
+            grad_diffeo: |_p, _xyz, grad| {
+                grad[0] = 2.0;
+                grad[1] = 0.0;
+                grad[2] = 0.0;
+                grad[3] = 3.0;
+            },
+            inner_deformation: None,
+        }
+    }
+
+    #[test]
+    fn compose_grad_def_matrix() {
+        // Df · J = [[2,0],[0,3]] · [[1,2],[3,4]] = [[2,4],[9,12]]
+        let def = scaling();
+        let mut grad_def = [1.0, 2.0, 3.0, 4.0];
+        def.compose_grad_def(&[0.5, 0.5], &mut grad_def, 2);
+
+        assert!((grad_def[0] - 2.0).abs() < 1e-12);
+        assert!((grad_def[1] - 4.0).abs() < 1e-12);
+        assert!((grad_def[2] - 9.0).abs() < 1e-12);
+        assert!((grad_def[3] - 12.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn compose_grad_def_tangent() {
+        // Df · t = [[2,0],[0,3]] · [1,3]ᵀ = [2,9]ᵀ (elem_dim = 1)
+        let def = scaling();
+        let mut grad_def = [1.0, 3.0];
+        def.compose_grad_def(&[0.5, 0.5], &mut grad_def, 1);
+
+        assert!((grad_def[0] - 2.0).abs() < 1e-12);
+        assert!((grad_def[1] - 9.0).abs() < 1e-12);
     }
 }

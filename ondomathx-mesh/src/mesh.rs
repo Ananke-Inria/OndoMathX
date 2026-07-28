@@ -3,6 +3,8 @@ use std::fs::File;
 use std::io::Write;
 
 pub mod circle;
+pub mod cube;
+pub mod refine;
 pub mod square;
 pub mod unstructured_mesh;
 
@@ -31,6 +33,12 @@ pub trait Mesh {
     fn get_elements_by_dimension(&self, dim: usize) -> Vec<usize>;
     fn get_elements_by_dimension_and_label(&self, label: usize, dim: usize) -> Vec<usize>;
 
+    //Writes into `grad_def` the Jacobian ∂x/∂u of the COMPLETE element map
+    //(isoparametric or analytic map composed with any attached deformation)
+    //evaluated at the reference coordinates `uvw`. `grad_def` is a pure
+    //output, overwritten row-major with exact shape
+    //geometric_dimension × (element reference dimension) — e.g. a quad cell
+    //in a 2D mesh yields a 2×2, a boundary edge a 2×1 (the tangent vector).
     fn get_element_grad_def(&self, element_index: usize, uvw: &[f64], grad_def: &mut [f64]);
 
     //Coloring API. Colors are defined only for elements of the highest
