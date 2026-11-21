@@ -2,5 +2,13 @@
 name = "lobattox"
 version = "0.1.0"
 edition = "2021"
+description = "Matrix-free spectral elements on quadrangle and hexahedron meshes."
+license = "MIT OR Apache-2.0"
 
 [dependencies]
+# anamesh: path dependency while the APIs co-evolve. lobatto: version
+# dependency (QuadratiX rule: published crates only).
+anamesh = { path = "../Anamesh" }
+lobatto = "0.1.4"
+nalgebra = "0.34"
+rayon = "1"
