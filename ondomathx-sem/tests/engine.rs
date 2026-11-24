@@ -2,9 +2,12 @@ mod common;
 
 use anamesh::mesh::UnstructuredMesh;
 use common::*;
-use lobattox::fields::Constant;
 use lobatto::tables::derivative_matrix_dyn;
-use lobattox::{cofactor, det, GeoKind, Gll2, Gll3, Iso2, Iso3, Numbering, PointIn, PointKernel, PointOut, Shape, Space};
+use lobattox::fields::Constant;
+use lobattox::{
+    cofactor, det, GeoKind, Gll2, Gll3, Iso2, Iso3, Numbering, PointIn, PointKernel, PointOut,
+    Shape, Space,
+};
 use nalgebra::{SMatrix, SVector};
 
 // ── Kernels ────────────────────────────────────────────────────────────
@@ -183,7 +186,11 @@ fn everything<const D: usize, S: Shape<D>>(space: &Space<D, S>) -> Everything {
 /// Anisotropic shapes have no continuous numbering yet; the engine does not
 /// use it anyway.
 fn check_vs_reference<const D: usize, S: Shape<D>>(mesh: &UnstructuredMesh, what: &str) {
-    let numbering = if S::ISOTROPIC { Numbering::Continuous } else { Numbering::None };
+    let numbering = if S::ISOTROPIC {
+        Numbering::Continuous
+    } else {
+        Numbering::None
+    };
     let space = Space::<D, S>::new(mesh, numbering);
     let n = &S::N[..D];
     let k = everything(&space);
@@ -218,7 +225,11 @@ fn check_2d<const NP: usize>() {
         let mesh = square(5, 3, q2, Some(partial_2d()));
         let space = Space::<2, Iso2<NP>>::new(&mesh, Numbering::Continuous);
         let kinds = GeoKind::ALL.map(|k| space.elements(k).len());
-        assert_eq!(kinds, if q2 { [6, 0, 9, 0] } else { [6, 9, 0, 0] }, "q2={q2}");
+        assert_eq!(
+            kinds,
+            if q2 { [6, 0, 9, 0] } else { [6, 9, 0, 0] },
+            "q2={q2}"
+        );
         check_vs_reference::<2, Iso2<NP>>(&mesh, &format!("2D partial q2={q2}"));
     }
     check_vs_reference::<2, Iso2<NP>>(&square(4, 3, true, Some(bending_2d())), "2D bending Q2");
@@ -227,7 +238,10 @@ fn check_2d<const NP: usize>() {
 /// Anisotropic shapes, on the same meshes (affine + Q1, affine + Q2, Q2 only).
 fn check_2d_aniso<S: Shape<2>>() {
     for q2 in [false, true] {
-        check_vs_reference::<2, S>(&square(5, 3, q2, Some(partial_2d())), &format!("2D partial q2={q2}"));
+        check_vs_reference::<2, S>(
+            &square(5, 3, q2, Some(partial_2d())),
+            &format!("2D partial q2={q2}"),
+        );
     }
     check_vs_reference::<2, S>(&square(4, 3, true, Some(bending_2d())), "2D bending Q2");
 }
@@ -384,7 +398,11 @@ fn mass_operator_matches_inverse_mass() {
     let space = Space::<2, Iso2<5>>::new(&mesh, Numbering::Continuous);
     let mut m = apply(&space, &Mass(1.0), &vec![1.0; space.n_dup()]);
     space.c_sum_shared::<1>(&mut m);
-    let inv = space.c_inverse_mass(&Constant(1.0)).diagonal().unwrap().to_vec();
+    let inv = space
+        .c_inverse_mass(&Constant(1.0))
+        .diagonal()
+        .unwrap()
+        .to_vec();
     let expected: Vec<f64> = inv.iter().map(|x| 1.0 / x).collect();
     assert_close(&m, &expected, 1e-14, "Σ_shared(M·1) vs 1/inverse_mass");
 }
@@ -417,7 +435,10 @@ fn elastic_rigid_modes_and_energy() {
     rigid_2d(&Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous), &el);
     rigid_2d(&Space::<2, Iso2<6>>::new(&mesh, Numbering::Continuous), &el);
 
-    let space = Space::<3, Iso3<3>>::new(&cube([2, 2, 2], false, Some(bending_3d())), Numbering::Continuous);
+    let space = Space::<3, Iso3<3>>::new(
+        &cube([2, 2, 2], false, Some(bending_3d())),
+        Numbering::Continuous,
+    );
     for f in [
         |_x: [f64; 3]| [0.0, 0.0, 1.0],
         |x: [f64; 3]| [-x[1], x[0], 0.0],

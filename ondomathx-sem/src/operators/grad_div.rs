@@ -42,7 +42,10 @@ impl<const D: usize> GradDivQ4Q2<D> {
     const NP: usize = 3usize.pow(D as u32);
 
     fn build<S: Shape<D>>(disp: &Space<D, S>, mass_coef: f64) -> Self {
-        assert!(S::NLOC == Self::NU, "GradDivQ4Q2: the displacement space must be Q4");
+        assert!(
+            S::NLOC == Self::NU,
+            "GradDivQ4Q2: the displacement space must be Q4"
+        );
         let n_elem = disp.n_elem();
         let w1 = disp.weights_1d(0).to_vec();
         let w3 = [1.0 / 6.0, 4.0 / 6.0, 1.0 / 6.0];
@@ -216,10 +219,19 @@ impl ElementOperator<2, Iso2<5>, Iso2<5>, 2, 2> for GradDivQ4Q2<2> {
     type Scratch = (GradDivScratch, <Nodes2 as Sweep<2, Iso2<3>>>::Tables);
 
     fn scratch<const W: usize>(&self) -> Self::Scratch {
-        (scratch::<2, W>(<Nodes2 as Sweep<2, Iso2<3>>>::TMP), <Nodes2 as Sweep<2, Iso2<3>>>::tables())
+        (
+            scratch::<2, W>(<Nodes2 as Sweep<2, Iso2<3>>>::TMP),
+            <Nodes2 as Sweep<2, Iso2<3>>>::tables(),
+        )
     }
 
-    fn apply<const W: usize>(&self, batch: &Batch<'_, 2, Iso2<5>, Iso2<5>>, u: &[f64], v: &mut [f64], s: &mut Self::Scratch) {
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, 2, Iso2<5>, Iso2<5>>,
+        u: &[f64],
+        v: &mut [f64],
+        s: &mut Self::Scratch,
+    ) {
         let (sc, t) = s;
         let mut mass = |p: &mut [f64], _: &mut [f64]| self.lumped::<Iso2<5>, W>(batch, p);
         self.apply_with::<Iso2<5>, Iso2<3>, Nodes2, W>(t, batch, u, v, sc, &mut mass);
@@ -230,10 +242,19 @@ impl ElementOperator<3, Iso3<5>, Iso3<5>, 3, 3> for GradDivQ4Q2<3> {
     type Scratch = (GradDivScratch, <Nodes3 as Sweep<3, Iso3<3>>>::Tables);
 
     fn scratch<const W: usize>(&self) -> Self::Scratch {
-        (scratch::<3, W>(<Nodes3 as Sweep<3, Iso3<3>>>::TMP), <Nodes3 as Sweep<3, Iso3<3>>>::tables())
+        (
+            scratch::<3, W>(<Nodes3 as Sweep<3, Iso3<3>>>::TMP),
+            <Nodes3 as Sweep<3, Iso3<3>>>::tables(),
+        )
     }
 
-    fn apply<const W: usize>(&self, batch: &Batch<'_, 3, Iso3<5>, Iso3<5>>, u: &[f64], v: &mut [f64], s: &mut Self::Scratch) {
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, 3, Iso3<5>, Iso3<5>>,
+        u: &[f64],
+        v: &mut [f64],
+        s: &mut Self::Scratch,
+    ) {
         let (sc, t) = s;
         let mut mass = |p: &mut [f64], _: &mut [f64]| self.lumped::<Iso3<5>, W>(batch, p);
         self.apply_with::<Iso3<5>, Iso3<3>, Nodes3, W>(t, batch, u, v, sc, &mut mass);
@@ -301,7 +322,11 @@ impl FusedKpQ4Q2<2> {
     /// The operator on the Q4 displacement space `disp` (with
     /// [`PressureMass2`] declared), pressure mass coefficient `mass_coef`.
     pub fn new(disp: &Space<2, Iso2<5>>, mass_coef: f64) -> Self {
-        Self::from_weights(GradDivQ4Q2::<2>::new(disp, mass_coef), disp.quadrature_weights::<PressureMass2>(), mass_coef)
+        Self::from_weights(
+            GradDivQ4Q2::<2>::new(disp, mass_coef),
+            disp.quadrature_weights::<PressureMass2>(),
+            mass_coef,
+        )
     }
 }
 
@@ -309,7 +334,11 @@ impl FusedKpQ4Q2<3> {
     /// The operator on the Q4 displacement space `disp` (with
     /// [`PressureMass3`] declared), pressure mass coefficient `mass_coef`.
     pub fn new(disp: &Space<3, Iso3<5>>, mass_coef: f64) -> Self {
-        Self::from_weights(GradDivQ4Q2::<3>::new(disp, mass_coef), disp.quadrature_weights::<PressureMass3>(), mass_coef)
+        Self::from_weights(
+            GradDivQ4Q2::<3>::new(disp, mass_coef),
+            disp.quadrature_weights::<PressureMass3>(),
+            mass_coef,
+        )
     }
 }
 
@@ -331,11 +360,19 @@ impl ElementOperator<2, Iso2<5>, Iso2<5>, 2, 2> for FusedKpQ4Q2<2> {
         )
     }
 
-    fn apply<const W: usize>(&self, batch: &Batch<'_, 2, Iso2<5>, Iso2<5>>, u: &[f64], v: &mut [f64], s: &mut Self::Scratch) {
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, 2, Iso2<5>, Iso2<5>>,
+        u: &[f64],
+        v: &mut [f64],
+        s: &mut Self::Scratch,
+    ) {
         let (sc, t, tm, pm) = s;
-        let mut mass =
-            |p: &mut [f64], tmp: &mut [f64]| self.tensor::<Iso2<5>, Iso2<3>, PressureMass2, W>(tm, batch, p, pm, tmp);
-        self.b.apply_with::<Iso2<5>, Iso2<3>, Nodes2, W>(t, batch, u, v, sc, &mut mass);
+        let mut mass = |p: &mut [f64], tmp: &mut [f64]| {
+            self.tensor::<Iso2<5>, Iso2<3>, PressureMass2, W>(tm, batch, p, pm, tmp)
+        };
+        self.b
+            .apply_with::<Iso2<5>, Iso2<3>, Nodes2, W>(t, batch, u, v, sc, &mut mass);
     }
 }
 
@@ -357,10 +394,18 @@ impl ElementOperator<3, Iso3<5>, Iso3<5>, 3, 3> for FusedKpQ4Q2<3> {
         )
     }
 
-    fn apply<const W: usize>(&self, batch: &Batch<'_, 3, Iso3<5>, Iso3<5>>, u: &[f64], v: &mut [f64], s: &mut Self::Scratch) {
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, 3, Iso3<5>, Iso3<5>>,
+        u: &[f64],
+        v: &mut [f64],
+        s: &mut Self::Scratch,
+    ) {
         let (sc, t, tm, pm) = s;
-        let mut mass =
-            |p: &mut [f64], tmp: &mut [f64]| self.tensor::<Iso3<5>, Iso3<3>, PressureMass3, W>(tm, batch, p, pm, tmp);
-        self.b.apply_with::<Iso3<5>, Iso3<3>, Nodes3, W>(t, batch, u, v, sc, &mut mass);
+        let mut mass = |p: &mut [f64], tmp: &mut [f64]| {
+            self.tensor::<Iso3<5>, Iso3<3>, PressureMass3, W>(tm, batch, p, pm, tmp)
+        };
+        self.b
+            .apply_with::<Iso3<5>, Iso3<3>, Nodes3, W>(t, batch, u, v, sc, &mut mass);
     }
 }

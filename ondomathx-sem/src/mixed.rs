@@ -52,7 +52,12 @@ where
         let set = u_space
             .quadrature_points::<Q>()
             .or_else(|| v_space.quadrature_points::<Q>())
-            .unwrap_or_else(|| panic!("quadrature {} is declared on neither space", std::any::type_name::<Q>()));
+            .unwrap_or_else(|| {
+                panic!(
+                    "quadrature {} is declared on neither space",
+                    std::any::type_name::<Q>()
+                )
+            });
         Pointwise {
             kernel,
             set,
@@ -78,8 +83,8 @@ pub struct PointwiseScratch {
     tmp: Vec<f64>,
 }
 
-impl<const D: usize, K, Q, SU, SV, const CU: usize, const CV: usize> ElementOperator<D, SU, SV, CU, CV>
-    for Pointwise<'_, D, K, Q, SU, SV>
+impl<const D: usize, K, Q, SU, SV, const CU: usize, const CV: usize>
+    ElementOperator<D, SU, SV, CU, CV> for Pointwise<'_, D, K, Q, SU, SV>
 where
     SU: Shape<D>,
     SV: Shape<D>,
@@ -103,15 +108,31 @@ where
         }
     }
 
-    fn apply<const W: usize>(&self, batch: &Batch<'_, D, SU, SV>, u: &[f64], y: &mut [f64], s: &mut PointwiseScratch) {
-        let (nq, nuw, nqw, nvw) = (<Q as Quadrature<D>>::NQ, SU::NLOC * W, <Q as Quadrature<D>>::NQ * W, SV::NLOC * W);
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, D, SU, SV>,
+        u: &[f64],
+        y: &mut [f64],
+        s: &mut PointwiseScratch,
+    ) {
+        let (nq, nuw, nqw, nvw) = (
+            <Q as Quadrature<D>>::NQ,
+            SU::NLOC * W,
+            <Q as Quadrature<D>>::NQ * W,
+            SV::NLOC * W,
+        );
         let (tu, tv, kernel, set) = (&self.tu, &self.tv, self.kernel, &self.set);
 
         // 2. Values and reference gradients at the points.
         for c in 0..CU {
             let uc = &u[c * nuw..(c + 1) * nuw];
             if K::USES_VALUE {
-                <Q as Sweep<D, SU>>::interpolate::<W>(tu, uc, &mut s.uq[c * nqw..(c + 1) * nqw], &mut s.tmp);
+                <Q as Sweep<D, SU>>::interpolate::<W>(
+                    tu,
+                    uc,
+                    &mut s.uq[c * nqw..(c + 1) * nqw],
+                    &mut s.tmp,
+                );
             }
             if K::USES_GRAD {
                 for d in 0..D {
@@ -197,7 +218,12 @@ where
         for c in 0..CV {
             let yc = &mut y[c * nvw..(c + 1) * nvw];
             if K::OUTPUTS_SOURCE {
-                <Q as Sweep<D, SV>>::interpolate_t::<W>(tv, &s.sq[c * nqw..(c + 1) * nqw], yc, &mut s.tmp);
+                <Q as Sweep<D, SV>>::interpolate_t::<W>(
+                    tv,
+                    &s.sq[c * nqw..(c + 1) * nqw],
+                    yc,
+                    &mut s.tmp,
+                );
             } else {
                 yc.fill(0.0);
             }

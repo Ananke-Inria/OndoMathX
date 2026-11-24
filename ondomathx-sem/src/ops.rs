@@ -1,5 +1,5 @@
 //! Building blocks for explicit time stepping, which itself lives in the
-//! examples (`examples/acoustic_modes.rs`, `examples/elastic_modes.rs`).
+//! examples (e.g. `examples/acoustic_wave_square.rs`).
 //!
 //! With the diagonal GLL mass, a leapfrog step for `M ü + K u = F` is
 //! ```text
@@ -46,7 +46,12 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Assembled operator of the continuous space: `out = Σ_shared(K_loc u)`,
     /// i.e. [`Space::mlt_add`] with `α = 1`, `β = 0` followed by
     /// [`Space::c_sum_shared`]. `out` is overwritten.
-    pub fn c_apply<const C: usize, K: PointKernel<D, C>>(&self, kernel: &K, u: &[f64], out: &mut [f64]) {
+    pub fn c_apply<const C: usize, K: PointKernel<D, C>>(
+        &self,
+        kernel: &K,
+        u: &[f64],
+        out: &mut [f64],
+    ) {
         self.mlt_add::<C, K>(kernel, 1.0, u, 0.0, out);
         self.c_sum_shared::<C>(out);
     }

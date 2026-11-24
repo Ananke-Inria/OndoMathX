@@ -22,7 +22,11 @@ fn seeded(n: usize, seed: u64) -> Vec<f64> {
 
 fn max_rel_diff(a: &[f64], b: &[f64]) -> f64 {
     let scale = b.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max) / scale
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f64::max)
+        / scale
 }
 
 fn discontinuous_2d() -> Space<2, Iso2<4>> {
@@ -108,7 +112,10 @@ fn inverse_mass_is_local_and_c_inverse_mass_is_assembled() {
     let mut m = s.local_mass(&rho);
     s.c_sum_shared::<1>(&mut m);
     let expected: Vec<f64> = m.iter().map(|x| 1.0 / x).collect();
-    assert_eq!(s.c_inverse_mass(&rho).diagonal().unwrap(), expected.as_slice());
+    assert_eq!(
+        s.c_inverse_mass(&rho).diagonal().unwrap(),
+        expected.as_slice()
+    );
 }
 
 /// `M⁻¹ (M u) = u`: element-local mass on the discontinuous space (any `u`),
@@ -117,7 +124,9 @@ fn inverse_mass_is_local_and_c_inverse_mass_is_assembled() {
 fn inverse_mass_inverts_the_mass_operator() {
     let mesh = cube([2, 1, 2], true, Some(bending_3d()));
     let coef = Constant(3.0);
-    let mass = Mass { coef: Constant(3.0) };
+    let mass = Mass {
+        coef: Constant(3.0),
+    };
 
     let sd = Space::<3, Iso3<4>>::new(&mesh, Numbering::None);
     let u = seeded(sd.n_dup() * 2, 2);
@@ -138,7 +147,10 @@ fn inverse_mass_inverts_the_mass_operator() {
 /// `InverseMass::apply` is `scale_by` with its diagonal, bit for bit.
 #[test]
 fn inverse_mass_apply_matches_scale_by() {
-    let s = Space::<2, Iso2<5>>::new(&square(2, 3, false, Some(bilinear_2d())), Numbering::Continuous);
+    let s = Space::<2, Iso2<5>>::new(
+        &square(2, 3, false, Some(bilinear_2d())),
+        Numbering::Continuous,
+    );
     let im = s.c_inverse_mass(&Constant(0.7));
     let u = seeded(s.n_dup() * 3, 4);
     let (mut a, mut b) = (u.clone(), u);

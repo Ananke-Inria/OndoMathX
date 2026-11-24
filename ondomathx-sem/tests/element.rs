@@ -5,7 +5,10 @@ mod common;
 use common::*;
 use lobattox::fields::Constant;
 use lobattox::kernels::Mass;
-use lobattox::{mlt_add_element, Batch, ElementOperator, GeoKind, GeoStorage, Gl, Iso2, Numbering, Quad2, Shape, Space};
+use lobattox::{
+    mlt_add_element, Batch, ElementOperator, GeoKind, GeoStorage, Gl, Iso2, Numbering, Quad2,
+    Shape, Space,
+};
 
 fn seeded(n: usize, seed: u64) -> Vec<f64> {
     let mut s = 0x9E37_79B9_7F4A_7C15_u64 ^ seed;
@@ -26,12 +29,19 @@ struct NodalMass {
 impl<const D: usize, S: Shape<D>> ElementOperator<D, S, S, 1, 1> for NodalMass {
     type Scratch = ();
     fn scratch<const W: usize>(&self) {}
-    fn apply<const W: usize>(&self, batch: &Batch<'_, D, S, S>, u: &[f64], v: &mut [f64], _: &mut ()) {
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, D, S, S>,
+        u: &[f64],
+        v: &mut [f64],
+        _: &mut (),
+    ) {
         let nodes = batch.u_space.node_points();
         for node in 0..S::NLOC {
             for lane in 0..W {
                 let (_, det_j, _) = batch.geometry(&nodes, lane, node);
-                v[node * W + lane] = nodes.weight(node) * det_j.abs() * (u[node * W + lane] * self.c);
+                v[node * W + lane] =
+                    nodes.weight(node) * det_j.abs() * (u[node * W + lane] * self.c);
             }
         }
     }
@@ -43,8 +53,24 @@ fn hand_written_mass_equals_the_kernel_engine() {
     let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
     let u = seeded(space.n_dup(), 1);
     let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    space.mlt_add::<1, _>(&Mass { coef: Constant(1.7) }, 1.0, &u, 0.0, &mut a);
-    mlt_add_element::<2, _, _, 1, 1, _>(&space, &space, &NodalMass { c: 1.7 }, 1.0, &u, 0.0, &mut b);
+    space.mlt_add::<1, _>(
+        &Mass {
+            coef: Constant(1.7),
+        },
+        1.0,
+        &u,
+        0.0,
+        &mut a,
+    );
+    mlt_add_element::<2, _, _, 1, 1, _>(
+        &space,
+        &space,
+        &NodalMass { c: 1.7 },
+        1.0,
+        &u,
+        0.0,
+        &mut b,
+    );
     assert_eq!(a, b);
 }
 
@@ -56,17 +82,30 @@ struct PerElement {
 impl<const D: usize, S: Shape<D>> ElementOperator<D, S, S, 2, 1> for PerElement {
     type Scratch = ();
     fn scratch<const W: usize>(&self) {}
-    fn apply<const W: usize>(&self, batch: &Batch<'_, D, S, S>, u: &[f64], v: &mut [f64], _: &mut ()) {
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, D, S, S>,
+        u: &[f64],
+        v: &mut [f64],
+        _: &mut (),
+    ) {
         let n = S::NLOC;
         for lane in 0..W {
             let e = batch.element(lane);
-            assert!(lane < batch.n_valid || e == batch.first + batch.n_valid - 1, "padded lane");
+            assert!(
+                lane < batch.n_valid || e == batch.first + batch.n_valid - 1,
+                "padded lane"
+            );
             if lane >= batch.n_valid {
-                assert!(u[lane] == 0.0 && u[n * W + lane] == 0.0, "padded input is zero");
+                assert!(
+                    u[lane] == 0.0 && u[n * W + lane] == 0.0,
+                    "padded input is zero"
+                );
             }
             for node in 0..n {
                 // component 1 of u, times the element's factor, plus its label
-                v[node * W + lane] = self.scale[e] * u[(n + node) * W + lane] + batch.label(lane) as f64;
+                v[node * W + lane] =
+                    self.scale[e] * u[(n + node) * W + lane] + batch.label(lane) as f64;
             }
         }
     }
@@ -103,11 +142,19 @@ impl<const D: usize, S: Shape<D>, Q: 'static + Sync> ElementOperator<D, S, S, 1,
     type Scratch = ();
     const READS_INPUT: bool = false;
     fn scratch<const W: usize>(&self) {}
-    fn apply<const W: usize>(&self, batch: &Batch<'_, D, S, S>, _: &[f64], v: &mut [f64], _: &mut ()) {
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, D, S, S>,
+        _: &[f64],
+        v: &mut [f64],
+        _: &mut (),
+    ) {
         let q = batch.quadrature::<Q>();
         v.fill(0.0);
         for (lane, v0) in v[..W].iter_mut().enumerate() {
-            *v0 = (0..q.len()).map(|p| q.weight(p) * batch.geometry(&q, lane, p).1.abs()).sum();
+            *v0 = (0..q.len())
+                .map(|p| q.weight(p) * batch.geometry(&q, lane, p).1.abs())
+                .sum();
         }
     }
 }
@@ -117,9 +164,19 @@ fn quadrature_through_the_batch() {
     type G = Quad2<Gl<3>, Gl<3>>;
     // f = (x, y(1 + 0.3x)) on [0,2]×[0,1]: area 2.6, det J of degree (1, 1).
     let mesh = square(4, 3, false, Some(bilinear_2d()));
-    let space = Space::<2, Iso2<3>>::builder(&mesh).quadrature::<G>(GeoStorage::Recompute).build();
+    let space = Space::<2, Iso2<3>>::builder(&mesh)
+        .quadrature::<G>(GeoStorage::Recompute)
+        .build();
     let mut v = vec![0.0; space.n_dup()];
-    mlt_add_element::<2, _, _, 1, 1, _>(&space, &space, &Area::<G>(Default::default()), 1.0, &v.clone(), 0.0, &mut v);
+    mlt_add_element::<2, _, _, 1, 1, _>(
+        &space,
+        &space,
+        &Area::<G>(Default::default()),
+        1.0,
+        &v.clone(),
+        0.0,
+        &mut v,
+    );
     let area: f64 = v.iter().sum();
     assert!((area - 2.6).abs() < 1e-12, "{area}");
 }

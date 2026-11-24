@@ -3,7 +3,9 @@ mod common;
 use common::*;
 use lobattox::fields::{Constant, PerLabel};
 use lobattox::kernels::{AcousticStiffness, IsotropicElastic};
-use lobattox::{dot, stable_dt, Iso2, Iso3, Numbering, PointKernel, Shape, Space, VtkField, VtkWriter};
+use lobattox::{
+    dot, stable_dt, Iso2, Iso3, Numbering, PointKernel, Shape, Space, VtkField, VtkWriter,
+};
 use nalgebra::DMatrix;
 
 /// Largest generalized eigenvalue of `(K, M)` by a dense solve: the continuous
@@ -14,7 +16,11 @@ fn dense_lambda_max<const D: usize, S: Shape<D>, const C: usize, K: PointKernel<
     k: &K,
     m_local: &[f64],
 ) -> f64 {
-    dense_lambda_max_of::<D, S, C>(space, |b, y| space.mlt_add::<C, K>(k, 1.0, b, 0.0, y), m_local)
+    dense_lambda_max_of::<D, S, C>(
+        space,
+        |b, y| space.mlt_add::<C, K>(k, 1.0, b, 0.0, y),
+        m_local,
+    )
 }
 
 /// Same, for any element-local operator `local(x, y)` (`y = A_loc x`, with
@@ -95,10 +101,20 @@ fn local_mass_and_mass_inner() {
     assert!((space.mass_inner::<2>(&m, &u2, &u2) - (8.0 / 3.0 + 2.0)).abs() < 1e-12);
     let mut ms = m.clone();
     space.c_sum_shared::<1>(&mut ms);
-    let inv = space.c_inverse_mass(&Constant(1.0)).diagonal().unwrap().to_vec();
-    assert!(inv.iter().zip(&ms).all(|(i, s)| (i * s - 1.0).abs() < 1e-14));
+    let inv = space
+        .c_inverse_mass(&Constant(1.0))
+        .diagonal()
+        .unwrap()
+        .to_vec();
+    assert!(inv
+        .iter()
+        .zip(&ms)
+        .all(|(i, s)| (i * s - 1.0).abs() < 1e-14));
     let mult = space.c_multiplicity();
-    assert_eq!(mult.iter().map(|k| 1.0 / k).sum::<f64>().round() as usize, space.c_n_global());
+    assert_eq!(
+        mult.iter().map(|k| 1.0 / k).sum::<f64>().round() as usize,
+        space.c_n_global()
+    );
 }
 
 #[test]
@@ -140,11 +156,22 @@ fn max_eigenvalue_matches_dense() {
     let mass = Constant(0.5);
     let exact = dense_lambda_max(&space, &k, &space.local_mass(&mass));
     let est = space.c_max_eigenvalue::<1, _, _>(&k, &mass, 20_000, 1e-14);
-    assert!(est.lambda <= exact * (1.0 + 1e-12), "{} > {exact}", est.lambda);
-    assert!((est.lambda - exact).abs() < 1e-8 * exact, "{} vs {exact}", est.lambda);
+    assert!(
+        est.lambda <= exact * (1.0 + 1e-12),
+        "{} > {exact}",
+        est.lambda
+    );
+    assert!(
+        (est.lambda - exact).abs() < 1e-8 * exact,
+        "{} vs {exact}",
+        est.lambda
+    );
 
     // Elasticity, C = 2.
-    let space = Space::<2, Iso2<3>>::new(&square(2, 1, false, Some(bilinear_2d())), Numbering::Continuous);
+    let space = Space::<2, Iso2<3>>::new(
+        &square(2, 1, false, Some(bilinear_2d())),
+        Numbering::Continuous,
+    );
     let k = IsotropicElastic {
         lambda: Constant(2.0),
         mu: Constant(1.0),
@@ -152,7 +179,11 @@ fn max_eigenvalue_matches_dense() {
     let mass = Constant(1.5);
     let exact = dense_lambda_max(&space, &k, &space.local_mass(&mass));
     let est = space.c_max_eigenvalue::<2, _, _>(&k, &mass, 20_000, 1e-14);
-    assert!((est.lambda - exact).abs() < 1e-8 * exact, "{} vs {exact}", est.lambda);
+    assert!(
+        (est.lambda - exact).abs() < 1e-8 * exact,
+        "{} vs {exact}",
+        est.lambda
+    );
 
     assert!((stable_dt(4.0, 0.95) - 0.95).abs() < 1e-15);
 }
@@ -171,9 +202,21 @@ fn vtk_writer_counts() {
         .write(
             &path,
             &[
-                VtkField { name: "p", components: 1, data: &u },
-                VtkField { name: "u", components: 2, data: &v },
-                VtkField { name: "w", components: 3, data: &w },
+                VtkField {
+                    name: "p",
+                    components: 1,
+                    data: &u,
+                },
+                VtkField {
+                    name: "u",
+                    components: 2,
+                    data: &v,
+                },
+                VtkField {
+                    name: "w",
+                    components: 3,
+                    data: &w,
+                },
             ],
         )
         .unwrap();
@@ -191,7 +234,14 @@ fn vtk_writer_counts() {
     let path = dir.join("cube.vtk");
     let u = space.sample::<3>(|x| x);
     VtkWriter::new(&space)
-        .write(&path, &[VtkField { name: "u", components: 3, data: &u }])
+        .write(
+            &path,
+            &[VtkField {
+                name: "u",
+                components: 3,
+                data: &u,
+            }],
+        )
         .unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("POINTS 27 double"));
@@ -214,7 +264,9 @@ fn power_iteration_on_a_composite_operator() {
         .numbering(Numbering::Continuous)
         .quadrature::<DispRule>(GeoStorage::Store)
         .build();
-    let sp = Space::<2, Iso2<2>>::builder(&mesh).quadrature::<PresMass>(GeoStorage::Store).build();
+    let sp = Space::<2, Iso2<2>>::builder(&mesh)
+        .quadrature::<PresMass>(GeoStorage::Store)
+        .build();
     let lambda = 1e3;
     let r = IsotropicElastic {
         lambda: Constant(0.0),
@@ -222,8 +274,12 @@ fn power_iteration_on_a_composite_operator() {
     };
     let rho = Constant(1.3);
     let inv_mp = sp.inverse_mass_with::<PresMass, _>(&Constant(1.0));
-    let div = Divergence { coef: Constant(1.0) };
-    let div_t = DivergenceTranspose { coef: Constant(1.0) };
+    let div = Divergence {
+        coef: Constant(1.0),
+    };
+    let div_t = DivergenceTranspose {
+        coef: Constant(1.0),
+    };
     // Element-local A x = R x + λ Bᵀ (M^P)⁻¹ B x.
     let local = |x: &[f64], y: &mut [f64]| {
         su.mlt_add::<2, _>(&r, 1.0, x, 0.0, y);
@@ -246,9 +302,20 @@ fn power_iteration_on_a_composite_operator() {
         50_000,
         1e-14,
     );
-    assert!(est.lambda <= exact * (1.0 + 1e-12), "{} > {exact}", est.lambda);
-    assert!((est.lambda - exact).abs() < 1e-8 * exact, "{} vs {exact} ({} iterations)", est.lambda, est.iterations);
+    assert!(
+        est.lambda <= exact * (1.0 + 1e-12),
+        "{} > {exact}",
+        est.lambda
+    );
+    assert!(
+        (est.lambda - exact).abs() < 1e-8 * exact,
+        "{} vs {exact} ({} iterations)",
+        est.lambda,
+        est.iterations
+    );
     // λ dominates: the spectrum is far above the elastic one.
-    let elastic = su.c_max_eigenvalue::<2, _, _>(&r, &rho, 50_000, 1e-12).lambda;
+    let elastic = su
+        .c_max_eigenvalue::<2, _, _>(&r, &rho, 50_000, 1e-12)
+        .lambda;
     assert!(exact > 10.0 * elastic, "{exact} vs elastic {elastic}");
 }

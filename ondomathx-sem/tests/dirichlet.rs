@@ -14,14 +14,22 @@ use lobattox::kernels::{AcousticStiffness, H1Error, L2Error};
 use lobattox::{mlt_add_mixed, GeoStorage, Gl, Iso2, Iso3, Numbering, Quad2, Shape, Space};
 
 /// Mask value at every node against a geometric predicate of the boundary.
-fn check_mask<const D: usize, S: Shape<D>>(space: &Space<D, S>, mask: &[f64], on: impl Fn([f64; D]) -> bool) {
+fn check_mask<const D: usize, S: Shape<D>>(
+    space: &Space<D, S>,
+    mask: &[f64],
+    on: impl Fn([f64; D]) -> bool,
+) {
     let n = S::NLOC;
     for e in 0..space.n_elem() {
         for node in 0..n {
             let x = space.map_and_jacobian(e, node).0;
             let x: [f64; D] = core::array::from_fn(|a| x[a]);
             let expected = if on(x) { 0.0 } else { 1.0 };
-            assert_eq!(mask[e * n + node], expected, "element {e} node {node} at {x:?}");
+            assert_eq!(
+                mask[e * n + node],
+                expected,
+                "element {e} node {node} at {x:?}"
+            );
         }
     }
 }
@@ -35,16 +43,25 @@ fn square_mask_whole_boundary_and_labels() {
     let sq = Square::new([0.0, 0.0], 2.0, 1.0, 3, 2, None, None);
     let space = Space::<2, Iso2<4>>::new(&sq, Numbering::Continuous);
     let mask = space.c_boundary_mask(&sq, None);
-    check_mask(&space, &mask, |x| near(x[0], 0.0) || near(x[0], 2.0) || near(x[1], 0.0) || near(x[1], 1.0));
+    check_mask(&space, &mask, |x| {
+        near(x[0], 0.0) || near(x[0], 2.0) || near(x[1], 0.0) || near(x[1], 1.0)
+    });
     // Distinct boundary DoFs: (3·3 + 1)(2·3 + 1) − (3·3 − 1)(2·3 − 1) = 30.
     let mult = space.c_multiplicity();
-    let zeros: f64 = mask.iter().zip(&mult).filter(|(m, _)| **m == 0.0).map(|(_, k)| 1.0 / k).sum();
+    let zeros: f64 = mask
+        .iter()
+        .zip(&mult)
+        .filter(|(m, _)| **m == 0.0)
+        .map(|(_, k)| 1.0 / k)
+        .sum();
     assert!((zeros - 30.0).abs() < 1e-9, "{zeros}");
     // All labels = the whole boundary; label 0 = the bottom edge.
     assert_eq!(space.c_boundary_mask(&sq, Some(&[0, 1, 2, 3])), mask);
     // Without the left label (3), the left side is free except its corners.
     let three = space.c_boundary_mask(&sq, Some(&[0, 1, 2]));
-    check_mask(&space, &three, |x| near(x[0], 2.0) || near(x[1], 0.0) || near(x[1], 1.0));
+    check_mask(&space, &three, |x| {
+        near(x[0], 2.0) || near(x[1], 0.0) || near(x[1], 1.0)
+    });
     let bottom = space.c_boundary_mask(&sq, Some(&[0]));
     check_mask(&space, &bottom, |x| near(x[1], 0.0));
 }
@@ -62,7 +79,12 @@ fn unstructured_cube_and_circle_masks() {
     let space = Space::<3, Iso3<3>>::new(&cube, Numbering::Continuous);
     let mask = space.c_boundary_mask(&cube, None);
     check_mask(&space, &mask, |x| {
-        near(x[0], 0.0) || near(x[0], 1.0) || near(x[1], 0.0) || near(x[1], 2.0) || near(x[2], 0.0) || near(x[2], 1.0)
+        near(x[0], 0.0)
+            || near(x[0], 1.0)
+            || near(x[1], 0.0)
+            || near(x[1], 2.0)
+            || near(x[2], 0.0)
+            || near(x[2], 1.0)
     });
 
     // Circle with exact geometry: the mask is the circle.
@@ -70,7 +92,9 @@ fn unstructured_cube_and_circle_masks() {
     let circle = Circle::new(c, r, 7, None, Some(true));
     let space = Space::<2, Iso2<4>>::new(&circle, Numbering::Continuous);
     let mask = space.c_boundary_mask(&circle, None);
-    check_mask(&space, &mask, |x| near(((x[0] - c[0]).powi(2) + (x[1] - c[1]).powi(2)).sqrt(), r));
+    check_mask(&space, &mask, |x| {
+        near(((x[0] - c[0]).powi(2) + (x[1] - c[1]).powi(2)).sqrt(), r)
+    });
 }
 
 /// `M⁻¹K` masked on `sin πx sin πy` (a Dirichlet eigenmode of `[0, 1]²`)
@@ -102,9 +126,15 @@ fn dirichlet_eigenmode() {
 fn error_kernels_integrate_the_squared_error() {
     type Q = Quad2<Gl<4>, Gl<4>>;
     let mesh = square(4, 2, false, None);
-    let space = Space::<2, Iso2<3>>::builder(&mesh).quadrature::<Q>(GeoStorage::Recompute).build();
-    let l2 = L2Error { exact: |x: [f64; 2]| [x[0] * x[1]] };
-    let h1 = H1Error { exact_grad: |x: [f64; 2]| [[x[1], x[0]]] };
+    let space = Space::<2, Iso2<3>>::builder(&mesh)
+        .quadrature::<Q>(GeoStorage::Recompute)
+        .build();
+    let l2 = L2Error {
+        exact: |x: [f64; 2]| [x[0] * x[1]],
+    };
+    let h1 = H1Error {
+        exact_grad: |x: [f64; 2]| [[x[1], x[0]]],
+    };
     let total = |u: &[f64], h1_norm: bool| -> f64 {
         let mut s = vec![0.0; space.n_dup()];
         if h1_norm {

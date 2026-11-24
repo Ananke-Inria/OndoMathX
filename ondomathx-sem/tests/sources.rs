@@ -12,7 +12,11 @@ use lobattox::{GeoStorage, Gl, Iso2, Numbering, Quad2, Space};
 
 fn max_rel(a: &[f64], b: &[f64]) -> f64 {
     let scale = b.iter().fold(1e-300_f64, |m, v| m.max(v.abs()));
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max) / scale
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f64::max)
+        / scale
 }
 
 /// With the lumped mass, `M⁻¹ Σ_shared F` is the nodal `f / ρ`.
@@ -50,7 +54,12 @@ fn quadrature_load_integrates() {
     let v = space.sample::<1>(|x| [x[0] * x[1]]);
     let fv: f64 = load.iter().zip(&v).map(|(a, b)| a * b).sum();
     assert!((fv - 4.0 / 3.0).abs() < 1e-13, "{fv}");
-    assert!(max_rel(&space.local_load_with::<Nodes, 1>(f), &space.local_load::<1>(f)) < 1e-15);
+    assert!(
+        max_rel(
+            &space.local_load_with::<Nodes, 1>(f),
+            &space.local_load::<1>(f)
+        ) < 1e-15
+    );
 }
 
 /// Forced leapfrog `u'' − Δu = f` on the free (Neumann) square, with

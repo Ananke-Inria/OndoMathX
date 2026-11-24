@@ -86,8 +86,14 @@ impl<const D: usize, SU: Shape<D>, SV: Shape<D>> Batch<'_, D, SU, SV> {
     /// `(x, det J, cof J)` at point `p` of `set` for lane `lane` (stored or
     /// recomputed, as declared).
     #[inline]
-    pub fn geometry(&self, set: &PointSet<'_, D>, lane: usize, p: usize) -> (SVector<f64, D>, f64, SMatrix<f64, D, D>) {
-        self.u_space.geo_at::<true>(set.geo, self.kind, self.element(lane), p)
+    pub fn geometry(
+        &self,
+        set: &PointSet<'_, D>,
+        lane: usize,
+        p: usize,
+    ) -> (SVector<f64, D>, f64, SMatrix<f64, D, D>) {
+        self.u_space
+            .geo_at::<true>(set.geo, self.kind, self.element(lane), p)
     }
 
     /// The declared quadrature `Q` of either space; panics if it is declared
@@ -96,7 +102,12 @@ impl<const D: usize, SU: Shape<D>, SV: Shape<D>> Batch<'_, D, SU, SV> {
         self.u_space
             .quadrature_points::<Q>()
             .or_else(|| self.v_space.quadrature_points::<Q>())
-            .unwrap_or_else(|| panic!("quadrature {} is declared on neither space", std::any::type_name::<Q>()))
+            .unwrap_or_else(|| {
+                panic!(
+                    "quadrature {} is declared on neither space",
+                    std::any::type_name::<Q>()
+                )
+            })
     }
 }
 
@@ -104,7 +115,14 @@ impl<const D: usize, SU: Shape<D>, SV: Shape<D>> Batch<'_, D, SU, SV> {
 /// batches of `W` elements: `u` holds the gathered input `[c][node][lane]`
 /// (`CU · SU::NLOC · W`), `v` receives the local result `[c][node][lane]`
 /// (`CV · SV::NLOC · W`, to be overwritten entirely).
-pub trait ElementOperator<const D: usize, SU: Shape<D>, SV: Shape<D>, const CU: usize, const CV: usize>: Sync {
+pub trait ElementOperator<
+    const D: usize,
+    SU: Shape<D>,
+    SV: Shape<D>,
+    const CU: usize,
+    const CV: usize,
+>: Sync
+{
     /// Per-task scratch.
     type Scratch: Send;
     /// Whether the input is read (otherwise it is not gathered).
@@ -114,7 +132,13 @@ pub trait ElementOperator<const D: usize, SU: Shape<D>, SV: Shape<D>, const CU: 
     fn scratch<const W: usize>(&self) -> Self::Scratch;
 
     /// Writes the local result of `batch` into `v`.
-    fn apply<const W: usize>(&self, batch: &Batch<'_, D, SU, SV>, u: &[f64], v: &mut [f64], s: &mut Self::Scratch);
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, D, SU, SV>,
+        u: &[f64],
+        v: &mut [f64],
+        s: &mut Self::Scratch,
+    );
 }
 
 /// `v ← β·v + α·A·u` for the element operator `op` between `u_space` (trial,
@@ -155,41 +179,51 @@ pub fn mlt_add_element<const D: usize, SU, SV, const CU: usize, const CV: usize,
         }
         let u_group = &u[range.start * block_u..range.end * block_u];
         let v_group = &mut v[range.start * block_v..range.end * block_v];
-        v_group.par_chunks_mut(W * block_v).enumerate().for_each_init(
-            || (vec![0.0; CU * nuw], vec![0.0; CV * nvw], op.scratch::<W>()),
-            |(su, sy, s), (b, v_batch)| {
-                let n_valid = v_batch.len() / block_v;
-                let batch = Batch {
-                    u_space,
-                    v_space,
-                    kind,
-                    first: range.start + b * W,
-                    n_valid,
-                };
-                // Gather u; padded lanes are zero.
-                if Op::READS_INPUT {
-                    let u_batch = &u_group[b * W * block_u..(b * W + n_valid) * block_u];
-                    for lane in 0..W {
-                        for c in 0..CU {
-                            for node in 0..nu {
-                                su[c * nuw + node * W + lane] =
-                                    if lane < n_valid { u_batch[lane * block_u + c * nu + node] } else { 0.0 };
+        v_group
+            .par_chunks_mut(W * block_v)
+            .enumerate()
+            .for_each_init(
+                || (vec![0.0; CU * nuw], vec![0.0; CV * nvw], op.scratch::<W>()),
+                |(su, sy, s), (b, v_batch)| {
+                    let n_valid = v_batch.len() / block_v;
+                    let batch = Batch {
+                        u_space,
+                        v_space,
+                        kind,
+                        first: range.start + b * W,
+                        n_valid,
+                    };
+                    // Gather u; padded lanes are zero.
+                    if Op::READS_INPUT {
+                        let u_batch = &u_group[b * W * block_u..(b * W + n_valid) * block_u];
+                        for lane in 0..W {
+                            for c in 0..CU {
+                                for node in 0..nu {
+                                    su[c * nuw + node * W + lane] = if lane < n_valid {
+                                        u_batch[lane * block_u + c * nu + node]
+                                    } else {
+                                        0.0
+                                    };
+                                }
                             }
                         }
                     }
-                }
-                op.apply::<W>(&batch, su, sy, s);
-                // Scatter.
-                for lane in 0..n_valid {
-                    for c in 0..CV {
-                        for node in 0..nv {
-                            let y = sy[c * nvw + node * W + lane];
-                            let out = &mut v_batch[lane * block_v + c * nv + node];
-                            *out = if beta == 0.0 { alpha * y } else { beta * *out + alpha * y };
+                    op.apply::<W>(&batch, su, sy, s);
+                    // Scatter.
+                    for lane in 0..n_valid {
+                        for c in 0..CV {
+                            for node in 0..nv {
+                                let y = sy[c * nvw + node * W + lane];
+                                let out = &mut v_batch[lane * block_v + c * nv + node];
+                                *out = if beta == 0.0 {
+                                    alpha * y
+                                } else {
+                                    beta * *out + alpha * y
+                                };
+                            }
                         }
                     }
-                }
-            },
-        );
+                },
+            );
     }
 }

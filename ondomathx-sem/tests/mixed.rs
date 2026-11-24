@@ -10,10 +10,12 @@ use lobatto::collocation::Gauss;
 use lobatto::tables::{derivative_matrix_dyn, interpolation_row, points_weights_dyn};
 use lobatto::utilities::barycentric_weights;
 use lobattox::fields::Constant;
-use lobattox::kernels::{AcousticStiffness, Divergence, DivergenceTranspose, IsotropicElastic, Mass};
+use lobattox::kernels::{
+    AcousticStiffness, Divergence, DivergenceTranspose, IsotropicElastic, Mass,
+};
 use lobattox::{
-    cofactor, det, mlt_add_mixed, GeoStorage, Gl, Gll, Gll2, Iso2, Iso3, MixedKernel, Numbering, PointIn, PointOut,
-    Quad2, Quad3, Quadrature, Shape, Space,
+    cofactor, det, mlt_add_mixed, GeoStorage, Gl, Gll, Gll2, Iso2, Iso3, MixedKernel, Numbering,
+    PointIn, PointOut, Quad2, Quad3, Quadrature, Shape, Space,
 };
 use nalgebra::{SMatrix, SVector};
 
@@ -35,7 +37,11 @@ fn dot(a: &[f64], b: &[f64]) -> f64 {
 
 fn max_rel(a: &[f64], b: &[f64]) -> f64 {
     let scale = b.iter().fold(1e-300_f64, |m, v| m.max(v.abs()));
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max) / scale
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f64::max)
+        / scale
 }
 
 /// A mixed kernel using everything: `CU = 2` → `CV = 1`.
@@ -74,14 +80,23 @@ fn basis_1d(n: usize, y: &[f64]) -> Basis1d {
 
 /// Brute force: tensor basis values / reference gradients from lobatto,
 /// geometry from the mesh's own map at the quadrature points.
-fn reference<const D: usize, SU: Shape<D>, SV: Shape<D>, Q: Quadrature<D>, const CU: usize, const CV: usize>(
+fn reference<
+    const D: usize,
+    SU: Shape<D>,
+    SV: Shape<D>,
+    Q: Quadrature<D>,
+    const CU: usize,
+    const CV: usize,
+>(
     mesh: &impl Mesh,
     space: &Space<D, SU>,
     kernel: &impl MixedKernel<D, CU, CV>,
     u: &[f64],
 ) -> Vec<f64> {
     let fam = Q::families();
-    let pw: Vec<(Vec<f64>, Vec<f64>)> = (0..D).map(|d| points_weights_dyn(Q::M[d], fam[d])).collect();
+    let pw: Vec<(Vec<f64>, Vec<f64>)> = (0..D)
+        .map(|d| points_weights_dyn(Q::M[d], fam[d]))
+        .collect();
     let bu: Vec<_> = (0..D).map(|d| basis_1d(SU::N[d], &pw[d].0)).collect();
     let bv: Vec<_> = (0..D).map(|d| basis_1d(SV::N[d], &pw[d].0)).collect();
     let idx = |k: usize, n: &[usize]| -> [usize; D] {
@@ -98,7 +113,13 @@ fn reference<const D: usize, SU: Shape<D>, SV: Shape<D>, Q: Quadrature<D>, const
         let val: f64 = (0..D).map(|d| b[d].0[qq[d]][ii[d]]).product();
         let grad = core::array::from_fn(|g| {
             (0..D)
-                .map(|d| if d == g { b[d].1[qq[d]][ii[d]] } else { b[d].0[qq[d]][ii[d]] })
+                .map(|d| {
+                    if d == g {
+                        b[d].1[qq[d]][ii[d]]
+                    } else {
+                        b[d].0[qq[d]][ii[d]]
+                    }
+                })
                 .product()
         });
         (val, grad)
@@ -163,7 +184,9 @@ fn check_vs_reference<const D: usize, SU: Shape<D>, SV: Shape<D>, Q>(mesh: &impl
 where
     Q: lobattox::Sweep<D, SU> + lobattox::Sweep<D, SV>,
 {
-    let su = Space::<D, SU>::builder(mesh).quadrature::<Q>(GeoStorage::Recompute).build();
+    let su = Space::<D, SU>::builder(mesh)
+        .quadrature::<Q>(GeoStorage::Recompute)
+        .build();
     let sv = Space::<D, SV>::new(mesh, Numbering::None);
     let u = seeded(su.n_dup() * 2, 5);
     let mut v = vec![f64::NAN; sv.n_dup()];
@@ -242,8 +265,24 @@ fn divergence_pair_is_adjoint() {
     let p = seeded(sp.n_dup(), 4);
     let (mut bu, mut btp) = (vec![0.0; p.len()], vec![0.0; u.len()]);
     let c = Constant(1.7);
-    mlt_add_mixed::<DispRule, 2, 1, 2, _, _, _>(&su, &sp, &Divergence { coef: c }, 1.0, &u, 0.0, &mut bu);
-    mlt_add_mixed::<DispRule, 1, 2, 2, _, _, _>(&sp, &su, &DivergenceTranspose { coef: c }, 1.0, &p, 0.0, &mut btp);
+    mlt_add_mixed::<DispRule, 2, 1, 2, _, _, _>(
+        &su,
+        &sp,
+        &Divergence { coef: c },
+        1.0,
+        &u,
+        0.0,
+        &mut bu,
+    );
+    mlt_add_mixed::<DispRule, 1, 2, 2, _, _, _>(
+        &sp,
+        &su,
+        &DivergenceTranspose { coef: c },
+        1.0,
+        &p,
+        0.0,
+        &mut btp,
+    );
     let (a, b) = (dot(&bu, &p), dot(&u, &btp));
     assert!((a - b).abs() < 1e-12 * a.abs().max(1.0), "{a} vs {b}");
 }
@@ -257,12 +296,32 @@ fn divergence_is_exact_on_polynomials() {
     let u = su.sample::<2>(|x| [x[0] * x[0], x[0] * x[1]]);
     let p = sp.sample::<1>(|x| [1.0 + x[1]]);
     let mut bu = vec![0.0; p.len()];
-    mlt_add_mixed::<DispRule, 2, 1, 2, _, _, _>(&su, &sp, &Divergence { coef: Constant(1.0) }, 1.0, &u, 0.0, &mut bu);
+    mlt_add_mixed::<DispRule, 2, 1, 2, _, _, _>(
+        &su,
+        &sp,
+        &Divergence {
+            coef: Constant(1.0),
+        },
+        1.0,
+        &u,
+        0.0,
+        &mut bu,
+    );
     let i = dot(&bu, &p);
     assert!((i - 9.0).abs() < 1e-12, "∫ p div u = {i}");
     // Divergence-free field: rotation.
     let u = su.sample::<2>(|x| [-x[1], x[0]]);
-    mlt_add_mixed::<DispRule, 2, 1, 2, _, _, _>(&su, &sp, &Divergence { coef: Constant(1.0) }, 1.0, &u, 0.0, &mut bu);
+    mlt_add_mixed::<DispRule, 2, 1, 2, _, _, _>(
+        &su,
+        &sp,
+        &Divergence {
+            coef: Constant(1.0),
+        },
+        1.0,
+        &u,
+        0.0,
+        &mut bu,
+    );
     assert!(bu.iter().all(|v| v.abs() < 1e-13), "div of a rotation");
 }
 
@@ -286,23 +345,47 @@ fn inverse_mass_with_inverts_the_quadrature_mass() {
     for q2 in [false, true] {
         let mesh = square(3, 2, q2, Some(bending_2d()));
         check(
-            &|| Space::builder(&mesh).quadrature::<G3>(GeoStorage::Recompute).build(),
+            &|| {
+                Space::builder(&mesh)
+                    .quadrature::<G3>(GeoStorage::Recompute)
+                    .build()
+            },
             &format!("q2={q2}"),
         );
     }
     let sq = Square::new([0.0, 0.0], 2.0, 1.0, 3, 2, Some(bending_2d()), None);
-    check(&|| Space::builder(&sq).quadrature::<G3>(GeoStorage::Recompute).build(), "mapped");
+    check(
+        &|| {
+            Space::builder(&sq)
+                .quadrature::<G3>(GeoStorage::Recompute)
+                .build()
+        },
+        "mapped",
+    );
 }
 
 #[test]
 fn inverse_mass_with_3d() {
     type G = Quad3<Gl<3>, Gl<3>, Gl<3>>;
     let mesh = cube([2, 1, 2], true, Some(bending_3d()));
-    let s = Space::<3, Iso3<3>>::builder(&mesh).quadrature::<G>(GeoStorage::Store).build();
+    let s = Space::<3, Iso3<3>>::builder(&mesh)
+        .quadrature::<G>(GeoStorage::Store)
+        .build();
     let p = seeded(s.n_dup(), 7);
     let mut mp = vec![0.0; p.len()];
-    mlt_add_mixed::<G, 1, 1, 3, _, _, _>(&s, &s, &Mass { coef: Constant(1.0) }, 1.0, &p, 0.0, &mut mp);
-    s.inverse_mass_with::<G, _>(&Constant(1.0)).apply::<1>(&mut mp);
+    mlt_add_mixed::<G, 1, 1, 3, _, _, _>(
+        &s,
+        &s,
+        &Mass {
+            coef: Constant(1.0),
+        },
+        1.0,
+        &p,
+        0.0,
+        &mut mp,
+    );
+    s.inverse_mass_with::<G, _>(&Constant(1.0))
+        .apply::<1>(&mut mp);
     assert!(max_rel(&mp, &p) < 1e-12);
 }
 
@@ -311,7 +394,9 @@ fn inverse_mass_with_3d() {
 fn inverse_mass_with_gll_rule_is_diagonal() {
     type Nodes = Quad2<Gll<4>, Gll<4>>;
     let mesh = square(3, 2, true, Some(bending_2d()));
-    let s = Space::<2, Iso2<4>>::builder(&mesh).quadrature::<Nodes>(GeoStorage::Store).build();
+    let s = Space::<2, Iso2<4>>::builder(&mesh)
+        .quadrature::<Nodes>(GeoStorage::Store)
+        .build();
     let c = Constant(0.8);
     let v = seeded(s.n_dup() * 3, 8);
     let (mut a, mut b) = (v.clone(), v);
@@ -329,7 +414,17 @@ fn different_meshes_panic() {
     let b = Space::<2, Iso2<3>>::new(&square(3, 2, false, None), Numbering::None);
     let u = vec![0.0; a.n_dup()];
     let mut v = vec![0.0; b.n_dup()];
-    mlt_add_mixed::<DispRule, 1, 1, 2, _, _, _>(&a, &b, &Mass { coef: Constant(1.0) }, 1.0, &u, 0.0, &mut v);
+    mlt_add_mixed::<DispRule, 1, 1, 2, _, _, _>(
+        &a,
+        &b,
+        &Mass {
+            coef: Constant(1.0),
+        },
+        1.0,
+        &u,
+        0.0,
+        &mut v,
+    );
 }
 
 #[test]
@@ -339,7 +434,17 @@ fn undeclared_mixed_quadrature_panics() {
     let a = Space::<2, Iso2<3>>::new(&mesh, Numbering::None);
     let u = vec![0.0; a.n_dup()];
     let mut v = u.clone();
-    mlt_add_mixed::<DispRule, 1, 1, 2, _, _, _>(&a, &a, &Mass { coef: Constant(1.0) }, 1.0, &u, 0.0, &mut v);
+    mlt_add_mixed::<DispRule, 1, 1, 2, _, _, _>(
+        &a,
+        &a,
+        &Mass {
+            coef: Constant(1.0),
+        },
+        1.0,
+        &u,
+        0.0,
+        &mut v,
+    );
 }
 
 #[test]

@@ -46,15 +46,27 @@ fn polynomials_are_integrated_exactly() {
         .quadrature::<L45>(GeoStorage::Store)
         .build();
     let exact = |a: i32, b: i32| 2f64.powi(a + 1) / (a + 1) as f64 / (b + 1) as f64;
-    let (w, x) = (space.quadrature_weights::<G34>(), space.quadrature_xyz::<G34>());
+    let (w, x) = (
+        space.quadrature_weights::<G34>(),
+        space.quadrature_xyz::<G34>(),
+    );
     for (a, b) in [(0, 0), (5, 7), (3, 6), (5, 0)] {
         let i = integrate(&w, &x, |x| x[0].powi(a) * x[1].powi(b));
-        assert!((i - exact(a, b)).abs() < 1e-13 * exact(a, b), "GL x^{a} y^{b}: {i}");
+        assert!(
+            (i - exact(a, b)).abs() < 1e-13 * exact(a, b),
+            "GL x^{a} y^{b}: {i}"
+        );
     }
-    let (w, x) = (space.quadrature_weights::<L45>(), space.quadrature_xyz::<L45>());
+    let (w, x) = (
+        space.quadrature_weights::<L45>(),
+        space.quadrature_xyz::<L45>(),
+    );
     for (a, b) in [(0, 0), (3, 7), (2, 5)] {
         let i = integrate(&w, &x, |x| x[0].powi(a) * x[1].powi(b));
-        assert!((i - exact(a, b)).abs() < 1e-13 * exact(a, b), "GLL x^{a} y^{b}: {i}");
+        assert!(
+            (i - exact(a, b)).abs() < 1e-13 * exact(a, b),
+            "GLL x^{a} y^{b}: {i}"
+        );
     }
 }
 
@@ -75,7 +87,10 @@ fn stored_geometry_equals_recomputed() {
         assert_eq!(r.quadrature_weights::<Q>(), s.quadrature_weights::<Q>());
         assert_eq!(r.quadrature_xyz::<Q>(), s.quadrature_xyz::<Q>());
         let u = seeded(r.n_dup() * 3, 1);
-        assert_eq!(r.quadrature_values::<Q, 3>(&u), s.quadrature_values::<Q, 3>(&u));
+        assert_eq!(
+            r.quadrature_values::<Q, 3>(&u),
+            s.quadrature_values::<Q, 3>(&u)
+        );
         let k = IsotropicElastic {
             lambda: Constant(2.0),
             mu: Constant(1.0),
@@ -94,10 +109,15 @@ fn stored_geometry_equals_recomputed() {
 fn node_quadrature_is_the_identity() {
     type Nodes = Quad2<Gll<5>, Gll<5>>;
     let mesh = square(3, 2, true, Some(bending_2d()));
-    let space = Space::<2, Iso2<5>>::builder(&mesh).quadrature::<Nodes>(GeoStorage::Recompute).build();
+    let space = Space::<2, Iso2<5>>::builder(&mesh)
+        .quadrature::<Nodes>(GeoStorage::Recompute)
+        .build();
     let u = seeded(space.n_dup() * 2, 2);
     assert_eq!(space.quadrature_values::<Nodes, 2>(&u), u);
-    assert_eq!(space.quadrature_weights::<Nodes>(), space.local_mass(&Constant(1.0)));
+    assert_eq!(
+        space.quadrature_weights::<Nodes>(),
+        space.local_mass(&Constant(1.0))
+    );
     let x = space.quadrature_xyz::<Nodes>();
     let s = space.sample::<2>(|x| x);
     for (i, xi) in x.iter().enumerate() {
@@ -113,7 +133,9 @@ fn node_quadrature_is_the_identity() {
 fn values_and_l2_norms_are_exact() {
     type Q = Quad3<Gl<3>, Gll<4>, Gl<2>>;
     let mesh = cube([2, 2, 1], false, None); // [0,1]×[0,2]×[0,1.5]
-    let space = Space::<3, Gll3<2, 4, 3>>::builder(&mesh).quadrature::<Q>(GeoStorage::Recompute).build();
+    let space = Space::<3, Gll3<2, 4, 3>>::builder(&mesh)
+        .quadrature::<Q>(GeoStorage::Recompute)
+        .build();
     let p = |x: [f64; 3]| (1.0 + x[0]) * (x[1] * x[1] * x[1] - x[1]) * (0.5 + x[2] * x[2]);
     let u = space.sample::<1>(|x| [p(x)]);
     let (v, x, w) = (
@@ -144,23 +166,38 @@ fn circle_exact_geometry() {
         .quadrature::<Q>(GeoStorage::Recompute)
         .build();
     let n_core = circle.n_x * circle.n_x;
-    assert_eq!(kinds(&space), [n_core, 0, 0, circle.get_elements_by_dimension(2).len() - n_core]);
+    assert_eq!(
+        kinds(&space),
+        [
+            n_core,
+            0,
+            0,
+            circle.get_elements_by_dimension(2).len() - n_core
+        ]
+    );
     let exact = std::f64::consts::PI * radius * radius;
     let area: f64 = space.quadrature_weights::<Q>().iter().sum();
-    assert!((area - exact).abs() < 1e-11 * exact, "exact geometry: {area} vs {exact}");
+    assert!(
+        (area - exact).abs() < 1e-11 * exact,
+        "exact geometry: {area} vs {exact}"
+    );
     // The unstructured conversion keeps only the Q2 nodes.
     let q2 = Space::<2, Iso2<4>>::builder(&circle.get_unstructured_mesh())
         .quadrature::<Q>(GeoStorage::Recompute)
         .build();
     let area_q2: f64 = q2.quadrature_weights::<Q>().iter().sum();
-    assert!((area_q2 - exact).abs() > 1e-6 * exact, "Q2 interpolation: {area_q2}");
+    assert!(
+        (area_q2 - exact).abs() > 1e-6 * exact,
+        "Q2 interpolation: {area_q2}"
+    );
     // Boundary of the exact geometry: all nodes within the disk, the outer ones on it.
     let x = space.sample::<2>(|x| x);
     let n = Space::<2, Iso2<4>>::NLOC;
     let r_max = (0..space.n_dup())
         .map(|i| {
             let (e, k) = (i / n, i % n);
-            ((x[e * 2 * n + k] - center[0]).powi(2) + (x[e * 2 * n + n + k] - center[1]).powi(2)).sqrt()
+            ((x[e * 2 * n + k] - center[0]).powi(2) + (x[e * 2 * n + n + k] - center[1]).powi(2))
+                .sqrt()
         })
         .fold(0.0, f64::max);
     assert!((r_max - radius).abs() < 1e-12, "outer radius {r_max}");
@@ -248,7 +285,11 @@ fn engine_on_mapped_elements() {
     sm.mlt_add::<2, _>(&k, 1.0, &u, 0.0, &mut a);
     sa.mlt_add::<2, _>(&k, 1.0, &u, 0.0, &mut b);
     let scale = b.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
-    let diff = a.iter().zip(&b).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max);
+    let diff = a
+        .iter()
+        .zip(&b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f64::max);
     assert!(diff < 1e-12 * scale, "max diff {diff:e}");
 }
 
@@ -257,7 +298,9 @@ fn engine_on_mapped_elements() {
 fn deformed_cube_is_mapped() {
     type Q = Quad3<Gl<4>, Gl<4>, Gl<4>>;
     let cube = Cube::new([0.0; 3], 1.0, 1.0, 1.0, 2, 2, 2, Some(bending_3d()), None);
-    let space = Space::<3, Iso3<3>>::builder(&cube).quadrature::<Q>(GeoStorage::Recompute).build();
+    let space = Space::<3, Iso3<3>>::builder(&cube)
+        .quadrature::<Q>(GeoStorage::Recompute)
+        .build();
     assert_eq!(kinds(&space), [0, 0, 0, 8]);
     let vol: f64 = space.quadrature_weights::<Q>().iter().sum();
     assert!(vol > 0.5 && vol < 2.0, "volume {vol}");

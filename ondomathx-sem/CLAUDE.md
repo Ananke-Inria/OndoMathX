@@ -180,7 +180,7 @@ cargo fmt
     `c_inverse_mass(&Inverse(kappa))` for acoustics.
 - **Time integration: leapfrog only, and not in the library** (decided
   2026-11-19). The library provides the building blocks (`ops.rs`); the time
-  loops live in the examples (`examples/common/mod.rs::leapfrog`).
+  loops live in the examples (each example writes its own loop).
   `uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt²·M⁻¹·Σ_shared(K_loc uⁿ) + dt²·M⁻¹F(tⁿ)`.
   `dt = 0.95·2/√ρ(M⁻¹K)`, estimated by power iteration (TetriX `lal.rs`).
   - Building blocks (names since step 7): `Space::c_apply` (`mlt_add` with
@@ -394,7 +394,12 @@ dedicated implementation. This section revises "Method and storage" and
 ### Other decisions
 - `max_eigenvalue` takes closures (operator application, mass solve, M inner
   product), as TetriX `lal::power_iteration` and C++ `LAL::PowerIteration`.
-- The examples use `EIG_RTOL = 1e-6`, `EIG_MAX_ITER = 5000` (done).
+- The examples use a relative tolerance `1e-3` and at most 5000 power
+  iterations (1e-6 until 2026-11-22). The test is the relative change of the
+  Rayleigh quotient, which converges from below, so the estimate is low:
+  dt grows by at most 1.3 % against 1e-6 (square 9.926e-4 → 1.006e-3, cube
+  4.588e-3 → 4.638e-3, the others ≤ 0.2 %), inside the 5 % safety margin;
+  iterations 701 → 12 (square), 756 → 35 (cube), 18–35 elsewhere.
 - Shared toolbox `ondomathx-toolbox` (option (a): it depends on Anamesh,
   behind a cargo feature; Anamesh stays independent). Contents to be decided:
   power iteration, norms, `stable_dt`, parameter fields (generalized over a
@@ -513,7 +518,10 @@ dedicated implementation. This section revises "Method and storage" and
    dense generalized eigensolve (acoustic two-material curved Q2, elastic),
    VTK counts and hex connectivity.
    - `examples/acoustic_modes.rs`, `examples/elastic_modes.rs` (`study` by
-     default, `bench [--vtk DIR] [--every N] [--steps N]`). Meshes: straight,
+     default, `bench [--vtk DIR] [--every N] [--steps N]`), with shared code in
+     `examples/common/`. **Removed 2026-11-22** (not in the spirit of the
+     examples: one simple standalone file per case); the measurements below
+     are kept as a record. Meshes: straight,
      bump-deformed Q1, curved Q2; the bump `ε·L·Π sin(πx_d/L_d)·(…)` vanishes on
      the boundary, so the box and its eigenmodes are exact. Elastic modes:
      divergence-free shear `(cos ax sin ay, −sin ax cos ay)`, traction-free on a
@@ -778,17 +786,47 @@ each step tested before the next:
     mapped, 3D Q2; anisotropic panics. Not checked in Vizir itself.
 18. **Point sources** via `(element, uvw)`; `Mesh::locate` in Anamesh.
 
-Examples ported from the C++ (2026-11-21): `examples/acoustic_wave.rs`
-(`square | cube | circle | mesh | all`, `--out DIR`, `--mesh FILE`,
-`--t-end T`), same parameters as `core/Testing/FESpace/AcousticWave_{Square,
-Cube, Circle, 2D_Mesh}.cpp` (`CInfty0` bump × `Ricker`, or the square's initial
-velocity; anisotropic `A` through the new kernel `AnisotropicAcoustic`;
-source as `M⁻¹ Σ local_load`); output as the C++: `<case>.mesh` (Anamesh),
-`<case>.<k>.vtk`, `<case>.<k:05>.sol` every Δt_out, written by a background
-thread. The disc is Anamesh `Circle(n = 54)` (1620 elements, exact geometry)
-vs the C++ `Circle(6, 6)` (1728).
-- Comparison (14 threads, same machine; C++ `-O3` OpenMP, patched copies
-  with a chrono around the loop, output on/off), ms per step without output,
+Examples ported from the C++ (2026-11-21), **one file per C++ example, no
+shared code** (for newcomers: one `main` with numbered steps mesh → space →
+physics → time step → source → output → leapfrog → timing; helpers such as
+`ricker` and `bump` repeated in each file): `examples/acoustic_wave_square.rs`,
+`acoustic_wave_cube.rs`, `acoustic_wave_circle.rs`, `acoustic_wave_2d_mesh.rs`
+(same parameters as `core/Testing/FESpace/AcousticWave_{Square, Cube, Circle,
+2D_Mesh}.cpp`: `CInfty0` bump × `Ricker`, or the square's initial velocity;
+anisotropic `A` through the kernel `AnisotropicAcoustic`; source as
+`M⁻¹ Σ local_load`). **Output by default** in `out/<example>/` under the
+crate (`CARGO_MANIFEST_DIR`, so independent of the launch directory;
+`/out/` is git-ignored): `<example>.mesh` (Anamesh), `<example>.<k>.vtk` and
+`<example>.<k:05>.sol` every Δt_out, written in the loop. The disc is Anamesh
+`Circle(n = 54)` (1620 elements, exact geometry) vs the C++ `Circle(6, 6)`
+(1728). The cube uses 12³ hexahedra instead of the C++ 3³, which does not
+resolve the source (bump of radius 0.05, Ricker ~14 Hz, speed 0.71 along z):
+‖u(0.4)‖ is 5× too large on 3³, within 1 % on 12³, 0.3 % on 24³ (refinement
+study 2026-11-21). The square writes every 0.1 (C++: 0.01). The default mesh
+of `acoustic_wave_2d_mesh` is
+`../Anamesh/assets/Potatoe.msh` (or the first argument).
+Elastodynamics examples (2026-11-21), same style (one file each, no shared
+code, output in `out/<example>/`), bump of radius 0.1 on the x component ×
+`Ricker(t, 0.2, 500)`, T = 1, snapshots every 0.1, order 4, 40 × 40 squares and
+12³ cubes:
+- `elastic_wave_square.rs`, `elastic_wave_cube.rs`: isotropic `IsotropicElastic`
+  (ρ = 1, λ = 2, μ = 1), lumped mass, leapfrog.
+- `nearly_incompressible_wave_square.rs`, `…_cube.rs`: Ramiche–Imperiale
+  formulation, `M Ü + R U + λ K^P U = F` with `R` = `IsotropicElastic`
+  (λ = 0, μ = 1), `K^P` = `FusedKpQ4Q2` (Green's `B`, Gauss–Legendre 3 pressure
+  mass), λ = 1000; CFL step by `power_iteration` on `M⁻¹(R + λK^P)` (dt ≈ 15.5×
+  smaller than the elastic one, as `√((λ+2μ)/(2+2))`); the pressure
+  `p = λ (M^P)⁻¹ B u` (`mlt_add_mixed` with `Divergence` on the displacement GLL
+  rule, `inverse_mass_with` on the discontinuous Q2 pressure space) written at
+  the snapshots (`<example>_pressure.<k>.vtk/.sol`). Plain leapfrog (the
+  leapfrog-Chebyshev scheme of Merlini et al. is not implemented).
+- Timings (14 threads, with output): elastic square 0.66 ms/step (724 steps),
+  cube 2.3 ms/step (257); nearly incompressible square 1.34 ms/step (11 252
+  steps, 15 s), cube 3.6 ms/step (4085 steps, 15 s). Amplitudes stay bounded
+  over the snapshots (stable).
+- Comparison (measured with the former combined example, same loops; 14
+  threads, same machine; C++ `-O3` OpenMP, patched copies with a chrono
+  around the loop, output on/off), ms per step without output,
   LobattoX vs C++: square 0.69 vs 1.14 (1.6×), cube 0.22 vs 2.70 (12×, tiny:
   the C++ loop applies stiffness + two masses), circle 0.57 vs 1.63 (2.9×;
   per DoF 9.7 vs 26.1 ns), potato mesh 0.38 vs 2.45 (6.4×). With output the
@@ -801,9 +839,13 @@ Later, unordered:
   plus boundary kernels); PML.
 - Physics: anisotropic `Cijkl`, nonlinear (Neo-Hookean) laws.
 - Output: binary VTK (ASCII 3D snapshots are ~150 MB), receivers.
-- Performance: skip the identity sweeps of a mixed product on the nodes
-  rule (and use the hc derivative kernels there); W > 1 in
-  `quadrature_values`. Element renumbering for locality; fusing the shared-DOF sum with
+- Performance: ~~skip the identity sweeps~~ (done 2026-11-21: a `Sweep`
+  pass whose 1D interpolation is the identity — Lobatto rule with `M = N` —
+  is not run, bitwise the same results; 8000 Q1 hexes, 14 threads: mixed
+  Laplace on the nodes 1.94 → 1.45 ns/dof (`mlt_add` 1.2), `B` on the GLL 5
+  rule 0.85 → 0.65, `Bᵀ` 1.0 → 0.75 ns per displacement dof); the hc
+  derivative kernels on the remaining `D_b` pass of the node rule (the rest of
+  the gap to `mlt_add`); W > 1 in `quadrature_values`. Element renumbering for locality; fusing the shared-DOF sum with
   the update; benchmarking nalgebra `SMatrix` against hand-rolled ≤3×3 algebra in
   the point kernel (geometry and push-forward), and switching if it pays.
   - Q1/Q2 geometry by sum factorization over the batch (interpolate the

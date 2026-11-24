@@ -49,8 +49,16 @@ impl VizirWriter {
     /// Panics for an anisotropic shape or a mesh with several (or
     /// unsupported) volume element types.
     pub fn new<const D: usize, S: Shape<D>, M: Mesh>(space: &Space<D, S>, mesh: &M) -> Self {
-        assert!(S::ISOTROPIC, "Vizir HOSolAt needs one degree: anisotropic shape {:?}", &S::N[..D]);
-        let msh_id = |e: usize| mesh.get_element(space.mesh_element(e)).geometric_element.msh_id;
+        assert!(
+            S::ISOTROPIC,
+            "Vizir HOSolAt needs one degree: anisotropic shape {:?}",
+            &S::N[..D]
+        );
+        let msh_id = |e: usize| {
+            mesh.get_element(space.mesh_element(e))
+                .geometric_element
+                .msh_id
+        };
         let id = msh_id(0);
         assert!(
             (0..space.n_elem()).all(|e| msh_id(e) == id),
@@ -65,7 +73,11 @@ impl VizirWriter {
         };
         let nloc = S::NLOC;
         let mut header = Vec::new();
-        write!(header, "MeshVersionFormatted 2\nDimension\n3\nHOSolAt{tag}NodesPositions\n{nloc}\n").unwrap();
+        write!(
+            header,
+            "MeshVersionFormatted 2\nDimension\n3\nHOSolAt{tag}NodesPositions\n{nloc}\n"
+        )
+        .unwrap();
         for node in 0..nloc {
             for x in space.ref_point(node) {
                 write!(header, "{x} ").unwrap();

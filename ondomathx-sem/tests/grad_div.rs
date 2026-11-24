@@ -8,7 +8,10 @@ mod common;
 use anamesh::mesh::Mesh;
 use common::*;
 use lobattox::operators::{FusedKp, GradDivQ4Q2};
-use lobattox::{mlt_add_element, ElementOperator, GeoStorage, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape, Space};
+use lobattox::{
+    mlt_add_element, ElementOperator, GeoStorage, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape,
+    Space,
+};
 
 fn seeded(n: usize, seed: u64) -> Vec<f64> {
     let mut s = 0x9E37_79B9_7F4A_7C15_u64 ^ seed;
@@ -28,10 +31,18 @@ fn dot(a: &[f64], b: &[f64]) -> f64 {
 
 fn max_rel(a: &[f64], b: &[f64]) -> f64 {
     let scale = b.iter().fold(1e-300_f64, |m, v| m.max(v.abs()));
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0, f64::max) / scale
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, f64::max)
+        / scale
 }
 
-fn apply<const D: usize, S: Shape<D>, Op: ElementOperator<D, S, S, D, D>>(s: &Space<D, S>, op: &Op, u: &[f64]) -> Vec<f64> {
+fn apply<const D: usize, S: Shape<D>, Op: ElementOperator<D, S, S, D, D>>(
+    s: &Space<D, S>,
+    op: &Op,
+    u: &[f64],
+) -> Vec<f64> {
     let mut v = vec![0.0; u.len()];
     mlt_add_element::<D, _, _, D, D, _>(s, s, op, 1.0, u, 0.0, &mut v);
     v
@@ -46,13 +57,18 @@ fn options_2d(mesh: &impl Mesh, c: f64) -> f64 {
         .numbering(Numbering::Continuous)
         .quadrature::<QB>(GeoStorage::Store)
         .build();
-    let pres = Space::<2, Iso2<3>>::builder(mesh).quadrature::<QM>(GeoStorage::Store).build();
+    let pres = Space::<2, Iso2<3>>::builder(mesh)
+        .quadrature::<QM>(GeoStorage::Store)
+        .build();
     let k3 = GradDivQ4Q2::<2>::new(&disp, c);
     let k2 = FusedKp::<2, Iso2<5>, Iso2<3>, QB, QM>::new(&disp, &pres, c);
     let (u, w) = (seeded(disp.n_dup() * 2, 1), seeded(disp.n_dup() * 2, 2));
     let (k3u, k3w) = (apply(&disp, &k3, &u), apply(&disp, &k3, &w));
     let (a, b) = (dot(&k3u, &w), dot(&u, &k3w));
-    assert!((a - b).abs() < 1e-11 * a.abs().max(1.0), "symmetry {a} vs {b}");
+    assert!(
+        (a - b).abs() < 1e-11 * a.abs().max(1.0),
+        "symmetry {a} vs {b}"
+    );
     assert!(dot(&k3u, &u) >= 0.0);
     max_rel(&k3u, &apply(&disp, &k2, &u))
 }
@@ -64,7 +80,9 @@ fn options_3d(mesh: &impl Mesh) -> f64 {
         .numbering(Numbering::Continuous)
         .quadrature::<QB>(GeoStorage::Store)
         .build();
-    let pres = Space::<3, Iso3<3>>::builder(mesh).quadrature::<QM>(GeoStorage::Store).build();
+    let pres = Space::<3, Iso3<3>>::builder(mesh)
+        .quadrature::<QM>(GeoStorage::Store)
+        .build();
     let k3 = GradDivQ4Q2::<3>::new(&disp, 1.0);
     let k2 = FusedKp::<3, Iso3<5>, Iso3<3>, QB, QM>::new(&disp, &pres, 1.0);
     let u = seeded(disp.n_dup() * 3, 3);
@@ -77,17 +95,26 @@ fn green_and_quadrature_options_agree_on_q1_meshes_2d() {
         (square(3, 2, false, None), "affine"),
         (square(4, 3, false, Some(bilinear_2d())), "bilinear Q1"),
         (square(5, 3, false, Some(partial_2d())), "affine + Q1"),
-        (square(3, 2, false, Some(bending_2d())), "bending interpolated by Q1"),
+        (
+            square(3, 2, false, Some(bending_2d())),
+            "bending interpolated by Q1",
+        ),
     ] {
         let err = options_2d(&mesh, 1.0);
         assert!(err < 1e-12, "{what}: option 3 vs option 2 {err:e}");
     }
-    assert!(options_2d(&square(3, 2, false, Some(bending_2d())), 2.5) < 1e-12, "c = 2.5");
+    assert!(
+        options_2d(&square(3, 2, false, Some(bending_2d())), 2.5) < 1e-12,
+        "c = 2.5"
+    );
 }
 
 #[test]
 fn green_and_quadrature_options_agree_on_q1_meshes_3d() {
-    for q1 in [cube([2, 1, 2], false, None), cube([2, 1, 2], false, Some(bending_3d()))] {
+    for q1 in [
+        cube([2, 1, 2], false, None),
+        cube([2, 1, 2], false, Some(bending_3d())),
+    ] {
         let err = options_3d(&q1);
         assert!(err < 1e-12, "3D Q1: option 3 vs option 2 {err:e}");
     }
@@ -136,11 +163,15 @@ fn options_on_curved_and_mapped_elements() {
     let q2_3d = options_3d(&cube([2, 1, 2], true, Some(bending_3d())));
     let circle = anamesh::mesh::circle::Circle::new([0.3, -0.2], 1.5, 7, None, None);
     let mapped = options_2d(&circle, 1.0);
-    let cb = anamesh::mesh::cube::Cube::new([0.0; 3], 1.0, 2.0, 1.5, 2, 1, 2, Some(twist_3d()), None);
+    let cb =
+        anamesh::mesh::cube::Cube::new([0.0; 3], 1.0, 2.0, 1.5, 2, 1, 2, Some(twist_3d()), None);
     let mapped_3d = options_3d(&cb);
     println!("option 3 vs option 2: Q2 2D {q2:e}, Q2 3D {q2_3d:e}, Circle {mapped:e}, twisted cube {mapped_3d:e}");
     assert!(q2 < 1e-12 && q2_3d < 1e-12, "Q2: {q2:e}, {q2_3d:e}");
-    assert!(mapped > 1e-10 && mapped_3d > 1e-10, "mapped: {mapped:e}, {mapped_3d:e}");
+    assert!(
+        mapped > 1e-10 && mapped_3d > 1e-10,
+        "mapped: {mapped:e}, {mapped_3d:e}"
+    );
 }
 
 /// `FusedKpQ4Q2` (Green's `B` of `GradDivQ4Q2`, Gauss–Legendre pressure mass)
@@ -163,7 +194,10 @@ fn gl_options_2d(mesh: &impl Mesh) -> f64 {
     let (u, w) = (seeded(disp.n_dup() * 2, 5), seeded(disp.n_dup() * 2, 6));
     let (k3u, k3w) = (apply(&disp, &k3, &u), apply(&disp, &k3, &w));
     let (a, b) = (dot(&k3u, &w), dot(&u, &k3w));
-    assert!((a - b).abs() < 1e-11 * a.abs().max(1.0), "symmetry {a} vs {b}");
+    assert!(
+        (a - b).abs() < 1e-11 * a.abs().max(1.0),
+        "symmetry {a} vs {b}"
+    );
     assert!(dot(&k3u, &u) >= 0.0);
     max_rel(&k3u, &apply(&disp, &k2, &u))
 }
@@ -178,7 +212,9 @@ fn gl_options_3d(mesh: &impl Mesh) -> f64 {
         .quadrature::<QB>(GeoStorage::Store)
         .quadrature::<PressureMass3>(GeoStorage::Store)
         .build();
-    let pres = Space::<3, Iso3<3>>::builder(mesh).quadrature::<QM>(GeoStorage::Store).build();
+    let pres = Space::<3, Iso3<3>>::builder(mesh)
+        .quadrature::<QM>(GeoStorage::Store)
+        .build();
     let k3 = FusedKpQ4Q2::<3>::new(&disp, 1.0);
     let k2 = FusedKp::<3, Iso3<5>, Iso3<3>, QB, QM>::new(&disp, &pres, 1.0);
     let u = seeded(disp.n_dup() * 3, 7);
@@ -195,7 +231,10 @@ fn fused_kp_q4q2_with_gauss_legendre_mass() {
         let err = gl_options_2d(&mesh);
         assert!(err < 1e-12, "{what}: {err:e}");
     }
-    for mesh in [cube([2, 1, 2], false, Some(bending_3d())), cube([2, 1, 2], true, Some(bending_3d()))] {
+    for mesh in [
+        cube([2, 1, 2], false, Some(bending_3d())),
+        cube([2, 1, 2], true, Some(bending_3d())),
+    ] {
         let err = gl_options_3d(&mesh);
         assert!(err < 1e-12, "3D: {err:e}");
     }

@@ -117,9 +117,17 @@ fn function_and_point_data_agree() {
 fn inverse_mass_with_fields() {
     let mesh = two_materials(square(4, 2, false, Some(partial_2d())), 1.0);
     let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
-    let one = space.c_inverse_mass(&Constant(1.0)).diagonal().unwrap().to_vec();
+    let one = space
+        .c_inverse_mass(&Constant(1.0))
+        .diagonal()
+        .unwrap()
+        .to_vec();
     // Acoustic mass coefficient 1/κ: inverse mass scales by κ.
-    let inv_kappa = space.c_inverse_mass(&Inverse(Constant(4.0))).diagonal().unwrap().to_vec();
+    let inv_kappa = space
+        .c_inverse_mass(&Inverse(Constant(4.0)))
+        .diagonal()
+        .unwrap()
+        .to_vec();
     let expected: Vec<f64> = one.iter().map(|x| 4.0 * x).collect();
     assert_close(&inv_kappa, &expected, 1e-14, "Inverse(κ)");
     // Mass kernel assembled = 1 / inverse_mass, for a per-label coefficient.
@@ -134,7 +142,10 @@ fn inverse_mass_with_fields() {
     let expected: Vec<f64> = inv.iter().map(|x| 1.0 / x).collect();
     assert_close(&m, &expected, 1e-14, "Σ_shared(M_ρ·1) vs 1/inverse_mass(ρ)");
     // Total mass on a straight mesh = Σ_labels ρ·area = 1·1 + 3·1.
-    let space = Space::<2, Iso2<3>>::new(&two_materials(square(4, 2, false, None), 1.0), Numbering::Continuous);
+    let space = Space::<2, Iso2<3>>::new(
+        &two_materials(square(4, 2, false, None), 1.0),
+        Numbering::Continuous,
+    );
     let inv = space.c_inverse_mass(&rho).diagonal().unwrap().to_vec();
     let mut mult = vec![1.0; space.n_dup()];
     space.c_sum_shared::<1>(&mut mult);

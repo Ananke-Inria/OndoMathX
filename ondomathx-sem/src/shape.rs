@@ -37,7 +37,13 @@ pub trait Shape<const D: usize>: Send + Sync + 'static {
     /// Reference derivative `∂/∂ξ_dir` (or its transpose) on a batch of `W`
     /// elements in lobatto's batched layout (node `g`, lane `l` at `g·W + l`);
     /// `output` is overwritten.
-    fn ref_derivative<const W: usize>(t: &Self::Tables, dir: usize, transpose: bool, input: &[f64], output: &mut [f64]);
+    fn ref_derivative<const W: usize>(
+        t: &Self::Tables,
+        dir: usize,
+        transpose: bool,
+        input: &[f64],
+        output: &mut [f64],
+    );
 }
 
 /// GLL data of one direction with `N` points.
@@ -110,21 +116,35 @@ impl<const N0: usize, const N1: usize> Shape<2> for Gll2<N0, N1> {
     /// Hardcoded lobatto kernels for isotropic `N = 4..7`, generic rectangular
     /// kernels (square matrix per direction) otherwise. The choice folds at
     /// compile time.
-    fn ref_derivative<const W: usize>(t: &Self::Tables, dir: usize, transpose: bool, input: &[f64], output: &mut [f64]) {
+    fn ref_derivative<const W: usize>(
+        t: &Self::Tables,
+        dir: usize,
+        transpose: bool,
+        input: &[f64],
+        output: &mut [f64],
+    ) {
         if N0 == N1 {
             match N0 {
-                4 => return hc!(dir, transpose, input, output, W;
+                4 => {
+                    return hc!(dir, transpose, input, output, W;
                     0, false => dx_q33_q33, 1, false => dy_q33_q33,
-                    0, true => dx_t_q33_q33, 1, true => dy_t_q33_q33),
-                5 => return hc!(dir, transpose, input, output, W;
+                    0, true => dx_t_q33_q33, 1, true => dy_t_q33_q33)
+                }
+                5 => {
+                    return hc!(dir, transpose, input, output, W;
                     0, false => dx_q44_q44, 1, false => dy_q44_q44,
-                    0, true => dx_t_q44_q44, 1, true => dy_t_q44_q44),
-                6 => return hc!(dir, transpose, input, output, W;
+                    0, true => dx_t_q44_q44, 1, true => dy_t_q44_q44)
+                }
+                6 => {
+                    return hc!(dir, transpose, input, output, W;
                     0, false => dx_q55_q55, 1, false => dy_q55_q55,
-                    0, true => dx_t_q55_q55, 1, true => dy_t_q55_q55),
-                7 => return hc!(dir, transpose, input, output, W;
+                    0, true => dx_t_q55_q55, 1, true => dy_t_q55_q55)
+                }
+                7 => {
+                    return hc!(dir, transpose, input, output, W;
                     0, false => dx_q66_q66, 1, false => dy_q66_q66,
-                    0, true => dx_t_q66_q66, 1, true => dy_t_q66_q66),
+                    0, true => dx_t_q66_q66, 1, true => dy_t_q66_q66)
+                }
                 _ => {}
             }
         }
@@ -169,21 +189,35 @@ impl<const N0: usize, const N1: usize, const N2: usize> Shape<3> for Gll3<N0, N1
     /// Hardcoded lobatto kernels for isotropic `N = 4..7`, generic rectangular
     /// kernels (square matrix per direction) otherwise. The choice folds at
     /// compile time.
-    fn ref_derivative<const W: usize>(t: &Self::Tables, dir: usize, transpose: bool, input: &[f64], output: &mut [f64]) {
+    fn ref_derivative<const W: usize>(
+        t: &Self::Tables,
+        dir: usize,
+        transpose: bool,
+        input: &[f64],
+        output: &mut [f64],
+    ) {
         if N0 == N1 && N1 == N2 {
             match N0 {
-                4 => return hc!(dir, transpose, input, output, W;
+                4 => {
+                    return hc!(dir, transpose, input, output, W;
                     0, false => dx_q333_q333, 1, false => dy_q333_q333, 2, false => dz_q333_q333,
-                    0, true => dx_t_q333_q333, 1, true => dy_t_q333_q333, 2, true => dz_t_q333_q333),
-                5 => return hc!(dir, transpose, input, output, W;
+                    0, true => dx_t_q333_q333, 1, true => dy_t_q333_q333, 2, true => dz_t_q333_q333)
+                }
+                5 => {
+                    return hc!(dir, transpose, input, output, W;
                     0, false => dx_q444_q444, 1, false => dy_q444_q444, 2, false => dz_q444_q444,
-                    0, true => dx_t_q444_q444, 1, true => dy_t_q444_q444, 2, true => dz_t_q444_q444),
-                6 => return hc!(dir, transpose, input, output, W;
+                    0, true => dx_t_q444_q444, 1, true => dy_t_q444_q444, 2, true => dz_t_q444_q444)
+                }
+                6 => {
+                    return hc!(dir, transpose, input, output, W;
                     0, false => dx_q555_q555, 1, false => dy_q555_q555, 2, false => dz_q555_q555,
-                    0, true => dx_t_q555_q555, 1, true => dy_t_q555_q555, 2, true => dz_t_q555_q555),
-                7 => return hc!(dir, transpose, input, output, W;
+                    0, true => dx_t_q555_q555, 1, true => dy_t_q555_q555, 2, true => dz_t_q555_q555)
+                }
+                7 => {
+                    return hc!(dir, transpose, input, output, W;
                     0, false => dx_q666_q666, 1, false => dy_q666_q666, 2, false => dz_q666_q666,
-                    0, true => dx_t_q666_q666, 1, true => dy_t_q666_q666, 2, true => dz_t_q666_q666),
+                    0, true => dx_t_q666_q666, 1, true => dy_t_q666_q666, 2, true => dz_t_q666_q666)
+                }
                 _ => {}
             }
         }

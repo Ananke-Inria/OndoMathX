@@ -14,8 +14,8 @@ use crate::element::PointSet;
 use crate::engine::PointIn;
 use crate::fields::Field;
 use crate::geometry::{
-    classify, cofactor, det, digits, jacobian_from_cofactor, tensor_permutation, ElementMap, GeoStorage, GeoTab,
-    PointGeo, StoredGeo,
+    classify, cofactor, det, digits, jacobian_from_cofactor, tensor_permutation, ElementMap,
+    GeoStorage, GeoTab, PointGeo, StoredGeo,
 };
 use crate::quadrature::Sweep;
 use crate::shape::Shape;
@@ -132,10 +132,19 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Q1 and Q2 geometric elements of dimension `D` with their tensor permutations.
     fn geometric_elements() -> [(&'static GeometricElement, Vec<usize>); 2] {
         let (q1, q2) = match D {
-            2 => (&anamesh::geometric_elements::QUADRANGLE4, &anamesh::geometric_elements::QUADRANGLE9),
-            _ => (&anamesh::geometric_elements::HEXAHEDRON8, &anamesh::geometric_elements::HEXAHEDRON27),
+            2 => (
+                &anamesh::geometric_elements::QUADRANGLE4,
+                &anamesh::geometric_elements::QUADRANGLE9,
+            ),
+            _ => (
+                &anamesh::geometric_elements::HEXAHEDRON8,
+                &anamesh::geometric_elements::HEXAHEDRON27,
+            ),
         };
-        [(q1, tensor_permutation::<D>(q1, 2)), (q2, tensor_permutation::<D>(q2, 3))]
+        [
+            (q1, tensor_permutation::<D>(q1, 2)),
+            (q2, tensor_permutation::<D>(q2, 3)),
+        ]
     }
 
     /// Tensor reference points `[0, 1]^D` (trailing zeros) of `n` per direction
@@ -197,7 +206,11 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
                 let el = mesh.get_element(m);
                 let ge = el.geometric_element;
                 if mesh.is_mapped_element(m) {
-                    assert_eq!(ge.reference_element.get_dim(), D, "element {m} is not a volume element");
+                    assert_eq!(
+                        ge.reference_element.get_dim(),
+                        D,
+                        "element {m} is not a volume element"
+                    );
                     // Affine test on the images of the 3^D reference nodes.
                     let images: Vec<[f64; D]> = q2_ref
                         .iter()
@@ -252,7 +265,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
             ranges[kind.index()] = start..mesh_elem.len();
         }
         let n_elem = mesh_elem.len();
-        let labels = mesh_elem.iter().map(|&m| mesh.get_element(m).label).collect();
+        let labels = mesh_elem
+            .iter()
+            .map(|&m| mesh.get_element(m).label)
+            .collect();
         let shared = match numbering {
             Numbering::None => None,
             Numbering::Continuous => Some(Self::continuous_numbering(mesh, &mesh_elem)),
@@ -292,7 +308,12 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Geometry at the reference points `ref_points` of every element: tables
     /// or stored values for the Q1/Q2 groups (`storage`), stored values for
     /// the mapped group (from the mesh's own map).
-    fn point_geo<M: Mesh>(&self, mesh: &M, ref_points: Vec<[f64; 3]>, storage: GeoStorage) -> PointGeo<D> {
+    fn point_geo<M: Mesh>(
+        &self,
+        mesh: &M,
+        ref_points: Vec<[f64; 3]>,
+        storage: GeoStorage,
+    ) -> PointGeo<D> {
         let np = ref_points.len();
         let [(q1_ge, q1_perm), (q2_ge, q2_perm)] = Self::geometric_elements();
         let tabs = [
@@ -300,28 +321,34 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
             (!self.ranges[2].is_empty()).then(|| GeoTab::new(q2_ge, &q2_perm, &ref_points)),
         ];
         // (x, J) at point p of storage element e → stored (x, det J, cof J).
-        let store = |range: &Range<usize>, f: &dyn Fn(usize, usize) -> (SVector<f64, D>, SMatrix<f64, D, D>)| {
-            let mut st = StoredGeo {
-                x: Vec::with_capacity(range.len() * np),
-                det: Vec::with_capacity(range.len() * np),
-                cof: Vec::with_capacity(range.len() * np),
-            };
-            for e in range.clone() {
-                for p in 0..np {
-                    let (x, j) = f(e, p);
-                    st.x.push(x);
-                    st.det.push(det(&j));
-                    st.cof.push(cofactor(&j));
+        let store =
+            |range: &Range<usize>,
+             f: &dyn Fn(usize, usize) -> (SVector<f64, D>, SMatrix<f64, D, D>)| {
+                let mut st = StoredGeo {
+                    x: Vec::with_capacity(range.len() * np),
+                    det: Vec::with_capacity(range.len() * np),
+                    cof: Vec::with_capacity(range.len() * np),
+                };
+                for e in range.clone() {
+                    for p in 0..np {
+                        let (x, j) = f(e, p);
+                        st.x.push(x);
+                        st.det.push(det(&j));
+                        st.cof.push(cofactor(&j));
+                    }
                 }
-            }
-            st
-        };
+                st
+            };
         let mut stored = [None, None, None];
         if storage == GeoStorage::Store {
             for (g, n1) in [(1usize, 2usize), (2, 3)] {
                 if let Some(tab) = &tabs[g - 1] {
                     let n = n1.pow(D as u32);
-                    let nodes = if g == 1 { &self.q1_nodes } else { &self.q2_nodes };
+                    let nodes = if g == 1 {
+                        &self.q1_nodes
+                    } else {
+                        &self.q2_nodes
+                    };
                     let base = self.ranges[g].start;
                     stored[g - 1] = Some(store(&self.ranges[g], &|e, p| {
                         let k = e - base;
@@ -342,7 +369,11 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
                 )
             }));
         }
-        let tabs = if storage == GeoStorage::Store { [None, None] } else { tabs };
+        let tabs = if storage == GeoStorage::Store {
+            [None, None]
+        } else {
+            tabs
+        };
         PointGeo {
             ref_points,
             tabs,
@@ -493,14 +524,22 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
 
     /// `(x, J)` of a Q1/Q2 element from the tables of a point set.
     #[inline]
-    fn tab_eval(&self, pg: &PointGeo<D>, kind: GeoKind, e: usize, p: usize) -> (SVector<f64, D>, SMatrix<f64, D, D>) {
+    fn tab_eval(
+        &self,
+        pg: &PointGeo<D>,
+        kind: GeoKind,
+        e: usize,
+        p: usize,
+    ) -> (SVector<f64, D>, SMatrix<f64, D, D>) {
         let (n, nodes, tab) = match kind {
             GeoKind::Q1 => (1 << D, &self.q1_nodes, &pg.tabs[0]),
             GeoKind::Q2 => (3usize.pow(D as u32), &self.q2_nodes, &pg.tabs[1]),
             _ => unreachable!("only Q1/Q2 elements are tabulated"),
         };
         let k = e - self.ranges[kind.index()].start;
-        tab.as_ref().expect("geometry tables").eval(&nodes[k * n..(k + 1) * n], p)
+        tab.as_ref()
+            .expect("geometry tables")
+            .eval(&nodes[k * n..(k + 1) * n], p)
     }
 
     /// `(x, det J, cof J)` at point `p` of the point set `pg`, element `e` of
@@ -635,17 +674,19 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     pub fn local_load<const C: usize>(&self, f: impl Fn([f64; D]) -> [f64; C] + Sync) -> Vec<f64> {
         let nloc = Self::NLOC;
         let mut v = vec![0.0; self.n_dup() * C];
-        v.par_chunks_mut(C * nloc).enumerate().for_each(|(e, block)| {
-            let kind = self.kind(e);
-            for node in 0..nloc {
-                let (x, det_j, _) = self.geo_at::<true>(&self.nodes, kind, e, node);
-                let ws = self.node_weights[node] * det_j.abs();
-                let val = f(core::array::from_fn(|a| x[a]));
-                for c in 0..C {
-                    block[c * nloc + node] = ws * val[c];
+        v.par_chunks_mut(C * nloc)
+            .enumerate()
+            .for_each(|(e, block)| {
+                let kind = self.kind(e);
+                for node in 0..nloc {
+                    let (x, det_j, _) = self.geo_at::<true>(&self.nodes, kind, e, node);
+                    let ws = self.node_weights[node] * det_j.abs();
+                    let val = f(core::array::from_fn(|a| x[a]));
+                    for c in 0..C {
+                        block[c * nloc + node] = ws * val[c];
+                    }
                 }
-            }
-        });
+            });
         v
     }
 
@@ -658,7 +699,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     ) -> Vec<f64> {
         let nloc = Self::NLOC;
         let q = self.entry::<Q>();
-        let t = q.sweep.downcast_ref::<Q::Tables>().expect("sweep tables of the declared quadrature");
+        let t = q
+            .sweep
+            .downcast_ref::<Q::Tables>()
+            .expect("sweep tables of the declared quadrature");
         let mut v = vec![0.0; self.n_dup() * C];
         v.par_chunks_mut(C * nloc).enumerate().for_each_init(
             || (vec![0.0; C * Q::NQ], vec![0.0; Q::TMP]),
@@ -673,7 +717,12 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
                     }
                 }
                 for c in 0..C {
-                    Q::interpolate_t::<1>(t, &fq[c * Q::NQ..(c + 1) * Q::NQ], &mut block[c * nloc..(c + 1) * nloc], tmp);
+                    Q::interpolate_t::<1>(
+                        t,
+                        &fq[c * Q::NQ..(c + 1) * Q::NQ],
+                        &mut block[c * nloc..(c + 1) * nloc],
+                        tmp,
+                    );
                 }
             },
         );
@@ -731,10 +780,17 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         let mut on = vec![0.0; self.n_dup()];
         for (m, f) in facets {
             let e = storage[m];
-            assert!(e != usize::MAX, "boundary facet of element {m}, not in the space");
+            assert!(
+                e != usize::MAX,
+                "boundary facet of element {m}, not in the space"
+            );
             let reference = um.get_element(m).geometric_element.reference_element;
             for (n, uvw) in self.nodes.ref_points.iter().enumerate() {
-                let hit = if D == 2 { reference.is_on_edge(uvw, f) } else { reference.is_on_face(uvw, f) };
+                let hit = if D == 2 {
+                    reference.is_on_edge(uvw, f)
+                } else {
+                    reference.is_on_face(uvw, f)
+                };
                 if hit {
                     on[e * nloc + n] = 1.0;
                 }
@@ -743,7 +799,9 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         // Copies of boundary nodes in elements touching the boundary only at
         // an edge or a vertex.
         self.c_sum_shared::<1>(&mut on);
-        on.iter().map(|&v| if v > 0.0 { 0.0 } else { 1.0 }).collect()
+        on.iter()
+            .map(|&v| if v > 0.0 { 0.0 } else { 1.0 })
+            .collect()
     }
 
     /// Number of copies of each duplicated node in the continuous numbering
@@ -897,8 +955,12 @@ impl<const D: usize, S: Shape<D>, M: Mesh> SpaceBuilder<'_, D, S, M> {
             "quadrature {} declared twice",
             type_name::<Q>()
         );
-        self.quads
-            .push((TypeId::of::<Q>(), type_name::<Q>(), storage, Space::<D, S>::quad_entry::<Q, M>));
+        self.quads.push((
+            TypeId::of::<Q>(),
+            type_name::<Q>(),
+            storage,
+            Space::<D, S>::quad_entry::<Q, M>,
+        ));
         self
     }
 
@@ -927,8 +989,9 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Entry of the quadrature `Q` (points and weights from `lobatto::tables`).
     fn quad_entry<Q: Sweep<D, S>, M: Mesh>(&self, mesh: &M, storage: GeoStorage) -> QuadEntry<D> {
         let families = Q::families();
-        let (x1, w1): (Vec<Vec<f64>>, Vec<Vec<f64>>) =
-            (0..D).map(|d| points_weights_dyn(Q::M[d], families[d])).unzip();
+        let (x1, w1): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (0..D)
+            .map(|d| points_weights_dyn(Q::M[d], families[d]))
+            .unzip();
         let ref_points = Self::tensor_points(Q::M, &x1);
         let weights = (0..Q::NQ)
             .map(|q| {
@@ -973,8 +1036,12 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
 
     /// The declared quadrature `Q`; panics if it was not declared.
     fn entry<Q: Sweep<D, S>>(&self) -> &QuadEntry<D> {
-        self.find_entry::<Q>()
-            .unwrap_or_else(|| panic!("quadrature {} was not declared (SpaceBuilder::quadrature)", type_name::<Q>()))
+        self.find_entry::<Q>().unwrap_or_else(|| {
+            panic!(
+                "quadrature {} was not declared (SpaceBuilder::quadrature)",
+                type_name::<Q>()
+            )
+        })
     }
 
     /// Inverse of the element-local mass `∫ c u v` integrated with the
@@ -1041,12 +1108,14 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     pub fn quadrature_weights<Q: Sweep<D, S>>(&self) -> Vec<f64> {
         let q = self.entry::<Q>();
         let mut out = vec![0.0; self.n_elem * Q::NQ];
-        out.par_chunks_mut(Q::NQ).enumerate().for_each(|(e, block)| {
-            let kind = self.kind(e);
-            for (p, w) in block.iter_mut().enumerate() {
-                *w = q.weights[p] * self.geo_at::<false>(&q.geo, kind, e, p).1.abs();
-            }
-        });
+        out.par_chunks_mut(Q::NQ)
+            .enumerate()
+            .for_each(|(e, block)| {
+                let kind = self.kind(e);
+                for (p, w) in block.iter_mut().enumerate() {
+                    *w = q.weights[p] * self.geo_at::<false>(&q.geo, kind, e, p).1.abs();
+                }
+            });
         out
     }
 
@@ -1054,13 +1123,15 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     pub fn quadrature_xyz<Q: Sweep<D, S>>(&self) -> Vec<[f64; D]> {
         let q = self.entry::<Q>();
         let mut out = vec![[0.0; D]; self.n_elem * Q::NQ];
-        out.par_chunks_mut(Q::NQ).enumerate().for_each(|(e, block)| {
-            let kind = self.kind(e);
-            for (p, x) in block.iter_mut().enumerate() {
-                let xp = self.geo_at::<true>(&q.geo, kind, e, p).0;
-                *x = core::array::from_fn(|a| xp[a]);
-            }
-        });
+        out.par_chunks_mut(Q::NQ)
+            .enumerate()
+            .for_each(|(e, block)| {
+                let kind = self.kind(e);
+                for (p, x) in block.iter_mut().enumerate() {
+                    let xp = self.geo_at::<true>(&q.geo, kind, e, p).0;
+                    *x = core::array::from_fn(|a| xp[a]);
+                }
+            });
         out
     }
 

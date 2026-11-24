@@ -208,7 +208,11 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// `(x, det J, cof J)` at local node `node` of storage element `e`, of
     /// kind `G` (stored or recomputed, see `GeoStorage`).
     #[inline]
-    fn geometry<const G: usize>(&self, e: usize, node: usize) -> (SVector<f64, D>, f64, SMatrix<f64, D, D>) {
+    fn geometry<const G: usize>(
+        &self,
+        e: usize,
+        node: usize,
+    ) -> (SVector<f64, D>, f64, SMatrix<f64, D, D>) {
         let kind = match G {
             AFFINE => GeoKind::Affine,
             Q1 => GeoKind::Q1,

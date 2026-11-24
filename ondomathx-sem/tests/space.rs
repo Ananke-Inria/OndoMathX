@@ -22,7 +22,11 @@ fn distinct_nodes(mult: &[f64]) -> f64 {
 
 /// Σ_global mass = Σ_dup mass / mult, with mass = 1 / inverse_mass.
 fn total_mass<const D: usize, S: Shape<D>>(space: &Space<D, S>) -> f64 {
-    let inv = space.c_inverse_mass(&Constant(1.0)).diagonal().unwrap().to_vec();
+    let inv = space
+        .c_inverse_mass(&Constant(1.0))
+        .diagonal()
+        .unwrap()
+        .to_vec();
     let mult = multiplicity(space);
     inv.iter().zip(&mult).map(|(i, m)| 1.0 / (i * m)).sum()
 }
@@ -104,7 +108,11 @@ fn check_square<const NP: usize>() {
             "NP={NP} q2={q2}"
         );
         assert!((distinct_nodes(&multiplicity(&space)) - space.c_n_global() as f64).abs() < 1e-9);
-        assert_eq!(kind_counts(&space), [6, 0, 0, 0], "straight Square is affine");
+        assert_eq!(
+            kind_counts(&space),
+            [6, 0, 0, 0],
+            "straight Square is affine"
+        );
         assert!((total_mass(&space) - 2.0).abs() < 1e-12, "area");
         check_continuity(&space, |x| [x[0].sin() + x[1], x[0] * x[1]]);
         check_jacobian(&space, &mesh);
@@ -211,7 +219,11 @@ fn check_cube<const NP: usize>() {
             "NP={NP} q2={q2}"
         );
         assert!((distinct_nodes(&multiplicity(&space)) - space.c_n_global() as f64).abs() < 1e-9);
-        assert_eq!(kind_counts(&space), [12, 0, 0, 0], "straight Cube is affine");
+        assert_eq!(
+            kind_counts(&space),
+            [12, 0, 0, 0],
+            "straight Cube is affine"
+        );
         assert!((total_mass(&space) - 3.0).abs() < 1e-12, "volume");
         check_continuity(&space, |x| [x[0].sin() + x[1] * x[2], x[0] * x[1] - x[2]]);
         check_jacobian(&space, &mesh);
@@ -267,7 +279,11 @@ fn cofactor_and_det() {
 // ── Anisotropic shapes ─────────────────────────────────────────────────
 
 /// Σ_dup local mass (no numbering needed) and the node Jacobians.
-fn check_anisotropic<const D: usize, S: Shape<D>>(straight: &UnstructuredMesh, measure: f64, deformed: &UnstructuredMesh) {
+fn check_anisotropic<const D: usize, S: Shape<D>>(
+    straight: &UnstructuredMesh,
+    measure: f64,
+    deformed: &UnstructuredMesh,
+) {
     let n = &S::N[..D];
     let space = Space::<D, S>::new(straight, Numbering::None);
     assert_eq!(space.n_dup(), space.n_elem() * n.iter().product::<usize>());
@@ -289,10 +305,16 @@ fn check_anisotropic<const D: usize, S: Shape<D>>(straight: &UnstructuredMesh, m
 
 #[test]
 fn anisotropic_shapes() {
-    let (s, d) = (square(3, 2, false, None), square(3, 2, true, Some(bending_2d())));
+    let (s, d) = (
+        square(3, 2, false, None),
+        square(3, 2, true, Some(bending_2d())),
+    );
     check_anisotropic::<2, Gll2<3, 5>>(&s, 2.0, &d);
     check_anisotropic::<2, Gll2<6, 2>>(&s, 2.0, &d);
-    let (s, d) = (cube([2, 3, 2], false, None), cube([2, 1, 2], true, Some(bending_3d())));
+    let (s, d) = (
+        cube([2, 3, 2], false, None),
+        cube([2, 1, 2], true, Some(bending_3d())),
+    );
     check_anisotropic::<3, Gll3<2, 4, 3>>(&s, 3.0, &d);
     check_anisotropic::<3, Gll3<5, 3, 4>>(&s, 3.0, &d);
 }

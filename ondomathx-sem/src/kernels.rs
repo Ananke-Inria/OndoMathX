@@ -170,7 +170,9 @@ pub struct L2Error<F> {
     pub exact: F,
 }
 
-impl<const D: usize, const C: usize, F: Fn([f64; D]) -> [f64; C] + Sync> MixedKernel<D, C, 1> for L2Error<F> {
+impl<const D: usize, const C: usize, F: Fn([f64; D]) -> [f64; C] + Sync> MixedKernel<D, C, 1>
+    for L2Error<F>
+{
     const USES_VALUE: bool = true;
     const USES_XYZ: bool = true;
     const OUTPUTS_SOURCE: bool = true;
@@ -190,7 +192,9 @@ pub struct H1Error<F> {
     pub exact_grad: F,
 }
 
-impl<const D: usize, const C: usize, F: Fn([f64; D]) -> [[f64; D]; C] + Sync> MixedKernel<D, C, 1> for H1Error<F> {
+impl<const D: usize, const C: usize, F: Fn([f64; D]) -> [[f64; D]; C] + Sync> MixedKernel<D, C, 1>
+    for H1Error<F>
+{
     const USES_GRAD: bool = true;
     const USES_XYZ: bool = true;
     const OUTPUTS_SOURCE: bool = true;

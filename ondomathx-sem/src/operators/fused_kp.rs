@@ -62,7 +62,10 @@ where
     /// neither space, if `QM` is not declared on `pres` or does not have the
     /// pressure counts, or on a non-positive mass.
     pub fn new(disp: &'a Space<D, SU>, pres: &'a Space<D, SP>, mass_coef: f64) -> Self {
-        assert!(disp.same_mesh(pres), "FusedKp: spaces built from different meshes");
+        assert!(
+            disp.same_mesh(pres),
+            "FusedKp: spaces built from different meshes"
+        );
         assert!(
             (0..D).all(|d| <QM as Quadrature<D>>::M[d] == SP::N[d]),
             "FusedKp: the pressure mass rule must have the pressure counts per direction"
@@ -109,7 +112,8 @@ pub struct FusedKpScratch<const D: usize> {
     tmp: Vec<f64>,
 }
 
-impl<const D: usize, SU, SP, QB, QM> ElementOperator<D, SU, SU, D, D> for FusedKp<'_, D, SU, SP, QB, QM>
+impl<const D: usize, SU, SP, QB, QM> ElementOperator<D, SU, SU, D, D>
+    for FusedKp<'_, D, SU, SP, QB, QM>
 where
     SU: Shape<D>,
     SP: Shape<D>,
@@ -135,7 +139,13 @@ where
         }
     }
 
-    fn apply<const W: usize>(&self, batch: &Batch<'_, D, SU, SU>, u: &[f64], v: &mut [f64], s: &mut FusedKpScratch<D>) {
+    fn apply<const W: usize>(
+        &self,
+        batch: &Batch<'_, D, SU, SU>,
+        u: &[f64],
+        v: &mut [f64],
+        s: &mut FusedKpScratch<D>,
+    ) {
         let (nb, nm) = (<QB as Quadrature<D>>::NQ, <QM as Quadrature<D>>::NQ);
         let (nuw, nbw) = (SU::NLOC * W, nb * W);
 
@@ -144,7 +154,13 @@ where
         for c in 0..D {
             for d in 0..D {
                 let out = &mut s.g[(c * D + d) * nbw..(c * D + d + 1) * nbw];
-                <QB as Sweep<D, SU>>::gradient::<W>(&self.tbu, d, &u[c * nuw..(c + 1) * nuw], out, &mut s.tmp);
+                <QB as Sweep<D, SU>>::gradient::<W>(
+                    &self.tbu,
+                    d,
+                    &u[c * nuw..(c + 1) * nuw],
+                    out,
+                    &mut s.tmp,
+                );
             }
         }
         for q in 0..nb {

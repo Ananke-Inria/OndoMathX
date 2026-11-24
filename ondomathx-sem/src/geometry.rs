@@ -88,8 +88,15 @@ impl<const D: usize> GeoTab<D> {
     /// Image `x(ξ_p)` and Jacobian `J[a][b] = ∂x_a/∂ξ_b` at point `p` of an
     /// element with tensor-ordered `nodes`.
     #[inline]
-    pub(crate) fn eval(&self, nodes: &[[f64; D]], p: usize) -> (SVector<f64, D>, SMatrix<f64, D, D>) {
-        let (v, g) = (&self.v[p * self.nk..(p + 1) * self.nk], &self.g[p * self.nk..(p + 1) * self.nk]);
+    pub(crate) fn eval(
+        &self,
+        nodes: &[[f64; D]],
+        p: usize,
+    ) -> (SVector<f64, D>, SMatrix<f64, D, D>) {
+        let (v, g) = (
+            &self.v[p * self.nk..(p + 1) * self.nk],
+            &self.g[p * self.nk..(p + 1) * self.nk],
+        );
         let mut x = SVector::<f64, D>::zeros();
         let mut jac = SMatrix::<f64, D, D>::zeros();
         for ((node, &phi), dphi) in nodes.iter().zip(v).zip(g) {
@@ -165,7 +172,10 @@ pub(crate) struct PointGeo<const D: usize> {
 
 /// Inverse of [`cofactor`]: `J` from `cof J` and `det J`
 /// (`cof(cof J) = det(J)^(D−2) · J`).
-pub(crate) fn jacobian_from_cofactor<const D: usize>(cof: &SMatrix<f64, D, D>, det_j: f64) -> SMatrix<f64, D, D> {
+pub(crate) fn jacobian_from_cofactor<const D: usize>(
+    cof: &SMatrix<f64, D, D>,
+    det_j: f64,
+) -> SMatrix<f64, D, D> {
     let c = cofactor(cof);
     if D == 2 {
         c
@@ -194,7 +204,11 @@ pub(crate) enum ElementMap<const D: usize> {
 /// interpolation of the corners (Q1 test). Panics on a degenerate frame.
 /// `q1_at_q2` is the Q1 table at the `3^D` tensor reference nodes of a Q2
 /// element (used only when `n1 = 3`).
-pub(crate) fn classify<const D: usize>(nodes: Vec<[f64; D]>, n1: usize, q1_at_q2: &GeoTab<D>) -> ElementMap<D> {
+pub(crate) fn classify<const D: usize>(
+    nodes: Vec<[f64; D]>,
+    n1: usize,
+    q1_at_q2: &GeoTab<D>,
+) -> ElementMap<D> {
     let corner = |c: [usize; D]| -> usize {
         let mut k = 0;
         for d in (0..D).rev() {
