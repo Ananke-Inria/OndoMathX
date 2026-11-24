@@ -429,6 +429,46 @@ impl Circle {
         [ux + self.center[0], uy + self.center[1], 0.0]
     }
 
+    // Branch of the circle map the element lives in (0 = inner square,
+    // 1..=4 = bottom/right/top/left arm). Decided from the element index,
+    // NOT from circle_selector: on the region interfaces (square boundary,
+    // quarter diagonals) the map is only C0 and the element must use the
+    // one-sided derivative of its own region.
+    fn region(&self, element_index: usize) -> usize {
+        let n_vol = self.n_square_elem + self.n_rho * self.n_theta;
+        if element_index < self.n_square_elem {
+            0
+        } else if element_index < n_vol {
+            1 + ((element_index - self.n_square_elem) % self.n_theta) / self.n_x
+        } else {
+            1 + (element_index - n_vol) / self.n_x
+        }
+    }
+
+    // Q(uvw): bilinear (cells) or linear (boundary edges) map from the
+    // reference element to the element's cell in the reference (square+arms)
+    // domain, through the pre-circle_map corners.
+    fn reference_point(&self, element_index: usize, uvw: &[f64]) -> [f64; 3] {
+        let element = self.get_element(element_index);
+        let nvertexes = element.geometric_element.reference_element.get_nvertexes();
+        let c: Vec<[f64; 3]> = element.indexes[..nvertexes]
+            .iter()
+            .map(|&i| self.get_node_ref(i))
+            .collect();
+        let w: Vec<f64> = if c.len() == 4 {
+            let (u, v) = (uvw[0], uvw[1]);
+            vec![(1.0 - u) * (1.0 - v), u * (1.0 - v), u * v, (1.0 - u) * v]
+        } else {
+            vec![1.0 - uvw[0], uvw[0]]
+        };
+        let mut q = [0.0; 3];
+        for (ck, wk) in c.iter().zip(&w) {
+            q[0] += wk * ck[0];
+            q[1] += wk * ck[1];
+        }
+        q
+    }
+
     // Applies the circle map (reference square → disk) to an absolute reference coordinate.
     fn circle_map(&self, xy: [f64; 3]) -> [f64; 3] {
         let p = [self.radius, self.center[0], self.center[1], self.alpha];
@@ -697,20 +737,7 @@ impl Mesh for Circle {
     // 2×1 (the tangent) for the boundary edges.
     fn get_element_grad_def(&self, element_index: usize, uvw: &[f64], grad_def: &mut [f64]) {
         debug_assert!(element_index < self.get_nelements());
-        let n_vol = self.n_square_elem + self.n_rho * self.n_theta;
-
-        // Branch of the circle map the element lives in (0 = inner square,
-        // 1..=4 = bottom/right/top/left arm). Decided from the element index,
-        // NOT from circle_selector: on the region interfaces (square boundary,
-        // quarter diagonals) the map is only C0 and the element must use the
-        // one-sided derivative of its own region.
-        let region = if element_index < self.n_square_elem {
-            0
-        } else if element_index < n_vol {
-            1 + ((element_index - self.n_square_elem) % self.n_theta) / self.n_x
-        } else {
-            1 + (element_index - n_vol) / self.n_x
-        };
+        let region = self.region(element_index);
 
         let element = self.get_element(element_index);
         //Only the corner vertices define the bilinear map Q (with the q2
@@ -790,6 +817,35 @@ impl Mesh for Circle {
         if let Some(deformation) = &self.deformation {
             deformation.compose_grad_def(&self.circle_map(q), grad_def, elem_dim);
         }
+    }
+
+    // x = circle_map(Q(uvw)) on the element's own region branch, composed
+    // with the attached deformation if any (the map of get_element_grad_def).
+    fn get_element_def(&self, element_index: usize, uvw: &[f64], def: &mut [f64]) {
+        debug_assert!(element_index < self.get_nelements());
+        let q = self.reference_point(element_index, uvw);
+        let p = [self.radius, self.center[0], self.center[1], self.alpha];
+        let mut x = [0.0; 3];
+        match self.region(element_index) {
+            0 => circle_inner(&p, &q, &mut x),
+            1 => circle_bottom(&p, &q, &mut x),
+            2 => circle_right(&p, &q, &mut x),
+            3 => circle_top(&p, &q, &mut x),
+            4 => circle_left(&p, &q, &mut x),
+            _ => unreachable!(),
+        }
+        if let Some(deformation) = &self.deformation {
+            let mut f_x = [0.0; 3];
+            deformation.eval(&x, &mut f_x);
+            x = f_x;
+        }
+        def[..2].copy_from_slice(&x[..2]);
+    }
+
+    // The arms follow the analytic circle map; the inner-square cells are
+    // bilinear (the circle map is the identity there) unless deformed.
+    fn is_mapped_element(&self, element_index: usize) -> bool {
+        self.deformation.is_some() || self.region(element_index) != 0
     }
 
     fn get_ncolors(&self) -> usize {

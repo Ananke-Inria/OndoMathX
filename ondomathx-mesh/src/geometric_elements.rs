@@ -227,6 +227,36 @@ pub struct GeometricElement {
     pub msh_id: usize,
 }
 
+impl GeometricElement {
+    /// Values and reference gradients of all shape functions at `points`
+    /// (reference coordinates), for evaluating the element map at a fixed set
+    /// of points (e.g. quadrature points) many times.
+    ///
+    /// Point-major, shape function fastest, in the canonical shape-function
+    /// order: with `n = nshape_functions`,
+    /// `values[p * n + k] = φ_k(points[p])` and
+    /// `gradients[p * n + k] = ∇φ_k(points[p])` (trailing zeros below
+    /// dimension 3).
+    ///
+    /// Panics if a point is outside the reference element.
+    pub fn tabulate(&self, points: &[[f64; 3]]) -> (Vec<f64>, Vec<[f64; 3]>) {
+        let n = self.nshape_functions;
+        let mut values = Vec::with_capacity(points.len() * n);
+        let mut gradients = Vec::with_capacity(points.len() * n);
+        for uvw in points {
+            assert!(
+                self.reference_element.is_inside(uvw),
+                "tabulation point {uvw:?} is outside the reference element"
+            );
+            for k in 0..n {
+                values.push((self.shape_functions[k])(uvw));
+                gradients.push((self.d_shape_functions[k])(uvw));
+            }
+        }
+        (values, gradients)
+    }
+}
+
 pub const EDGE2: GeometricElement = GeometricElement {
     reference_element: &EDGE,
     nshape_functions: 2,

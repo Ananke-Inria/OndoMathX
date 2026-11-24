@@ -97,6 +97,12 @@ impl Square {
 }
 
 impl Mesh for Square {
+    //Structured numbering, any counts (n[2] is ignored).
+    fn get_tensor_numbering(&self, n: [usize; 3]) -> (Vec<Vec<usize>>, usize) {
+        assert!(n[0] >= 2 && n[1] >= 2, "at least 2 DoFs per direction, got {:?}", &n[..2]);
+        self.get_numbering(n[0], n[1])
+    }
+
     fn get_deformation(&self) -> Option<&Diffeomorphism> {
         self.deformation.as_ref()
     }

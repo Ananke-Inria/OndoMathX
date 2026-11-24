@@ -520,4 +520,43 @@ mod tests {
         assert_eq!(HEXAHEDRON8.nshape_functions, 8);
         assert_eq!(HEXAHEDRON27.nshape_functions, 27);
     }
+
+    // === tabulate ===
+
+    fn check_tabulate(ge: &GeometricElement, points: &[[f64; 3]]) {
+        let n = ge.nshape_functions;
+        let (v, g) = ge.tabulate(points);
+        assert_eq!((v.len(), g.len()), (points.len() * n, points.len() * n));
+        for (p, uvw) in points.iter().enumerate() {
+            for k in 0..n {
+                assert_eq!(v[p * n + k], ge.shape_functions[k](uvw));
+                assert_eq!(g[p * n + k], ge.d_shape_functions[k](uvw));
+            }
+            let sum: f64 = v[p * n..(p + 1) * n].iter().sum();
+            assert!((sum - 1.0).abs() < 1e-12, "partition of unity at {uvw:?}");
+            for d in 0..3 {
+                let s: f64 = g[p * n..(p + 1) * n].iter().map(|x| x[d]).sum();
+                assert!(s.abs() < 1e-12, "gradients sum to zero at {uvw:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn tabulate_matches_shape_functions() {
+        let pts2 = [[0.0, 0.0, 0.0], [0.3, 0.7, 0.0], [1.0, 0.5, 0.0], [0.1127, 0.8873, 0.0]];
+        let pts3 = [[0.0, 0.0, 0.0], [0.3, 0.7, 0.2], [1.0, 0.5, 1.0], [0.1127, 0.5, 0.8873]];
+        check_tabulate(&QUADRANGLE4, &pts2);
+        check_tabulate(&QUADRANGLE9, &pts2);
+        check_tabulate(&HEXAHEDRON8, &pts3);
+        check_tabulate(&HEXAHEDRON27, &pts3);
+        check_tabulate(&TRIANGLE6, &[[0.2, 0.3, 0.0], [0.0, 1.0, 0.0]]);
+        let (v, g) = QUADRANGLE9.tabulate(&[]);
+        assert!(v.is_empty() && g.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "outside the reference element")]
+    fn tabulate_outside_panics() {
+        let _ = QUADRANGLE4.tabulate(&[[1.5, 0.5, 0.0]]);
+    }
 }

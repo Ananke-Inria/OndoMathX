@@ -252,4 +252,168 @@ mod tests {
             "area = {area}, exact = {exact}"
         );
     }
+
+    // === get_element_def: the map differentiated by get_element_grad_def ===
+
+    use anamesh::mesh::cube::Cube;
+
+    //3D map with a smooth known Jacobian.
+    fn twist_3d() -> Diffeomorphism {
+        Diffeomorphism {
+            inner_dim: 3,
+            outer_dim: 3,
+            params: vec![],
+            diffeo: |_p, x, f| {
+                f[0] = x[0] + 0.1 * x[2].sin();
+                f[1] = x[1] + 0.1 * x[0] * x[0];
+                f[2] = x[2] + 0.05 * x[0] * x[1];
+            },
+            grad_diffeo: |_p, x, g| {
+                g.copy_from_slice(&[1.0, 0.0, 0.1 * x[2].cos(), 0.2 * x[0], 1.0, 0.0, 0.05 * x[1], 0.05 * x[0], 1.0]);
+            },
+            inner_deformation: None,
+        }
+    }
+
+    //Centred finite differences of get_element_def against
+    //get_element_grad_def, at interior and boundary-touching points.
+    fn check_def_fd(mesh: &impl Mesh, elements: impl Iterator<Item = usize>) {
+        let geo_dim = mesh.get_geometric_dimension();
+        let h = 1e-5;
+        for el in elements {
+            let elem_dim = mesh.get_element(el).geometric_element.reference_element.get_dim();
+            let points: Vec<[f64; 3]> = match elem_dim {
+                3 => vec![[0.3, 0.7, 0.2], [0.55, 0.15, 0.9]],
+                2 => vec![[0.3, 0.7, 0.0], [0.55, 0.15, 0.0]],
+                _ => vec![[0.3, 0.0, 0.0], [0.85, 0.0, 0.0]],
+            };
+            for uvw in &points {
+                let mut jac = [0.0; 9];
+                mesh.get_element_grad_def(el, uvw, &mut jac);
+                for b in 0..elem_dim {
+                    let (mut up, mut um) = (*uvw, *uvw);
+                    up[b] += h;
+                    um[b] -= h;
+                    let (mut fp, mut fm) = ([0.0; 3], [0.0; 3]);
+                    mesh.get_element_def(el, &up, &mut fp);
+                    mesh.get_element_def(el, &um, &mut fm);
+                    for a in 0..geo_dim {
+                        let fd = (fp[a] - fm[a]) / (2.0 * h);
+                        assert!(
+                            (jac[a * elem_dim + b] - fd).abs() < 1e-7,
+                            "element {el}, J[{a}][{b}] = {} but FD of get_element_def gives {fd}",
+                            jac[a * elem_dim + b]
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    //At the corner vertices the map interpolates the (deformed) nodes.
+    fn check_def_vertices(mesh: &impl Mesh) {
+        let geo_dim = mesh.get_geometric_dimension();
+        for el in mesh.get_elements_by_dimension(mesh.get_topologic_dimension()) {
+            let element = mesh.get_element(el);
+            let reference = element.geometric_element.reference_element;
+            let corners: Vec<[f64; 3]> = match reference.get_dim() {
+                2 => vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]],
+                _ => vec![
+                    [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
+                ],
+            };
+            for (v, uvw) in corners.iter().enumerate() {
+                let mut node = mesh.get_node(element.indexes[v]);
+                if let Some(def) = mesh.get_deformation() {
+                    let mut f = [0.0; 3];
+                    def.eval(&node, &mut f);
+                    node = f;
+                }
+                let mut x = [0.0; 3];
+                mesh.get_element_def(el, uvw, &mut x);
+                for a in 0..geo_dim {
+                    assert!((x[a] - node[a]).abs() < 1e-12, "element {el} vertex {v}: {x:?} vs {node:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn def_matches_grad_def_square_and_unstructured() {
+        for q2 in [None, Some(true)] {
+            for deformation in [None, Some(bending())] {
+                let square = Square::new([-0.5, 0.25], 2.0, 1.5, 4, 3, deformation.clone(), q2);
+                check_def_fd(&square, 0..square.get_nelements());
+                check_def_vertices(&square);
+                let mesh = square.get_unstructured_mesh();
+                check_def_fd(&mesh, 0..mesh.get_nelements());
+                check_def_vertices(&mesh);
+                //The default is the node interpolation of eval_map.
+                for el in 0..mesh.get_nelements() {
+                    let mut x = [0.0; 3];
+                    mesh.get_element_def(el, &[0.3, 0.6, 0.0], &mut x);
+                    let y = eval_map(&mesh, el, &[0.3, 0.6, 0.0]);
+                    assert_eq!(x[..2], y[..2]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn def_matches_grad_def_cube() {
+        for q2 in [None, Some(true)] {
+            for deformation in [None, Some(twist_3d())] {
+                let cube = Cube::new([0.1, -0.2, 0.3], 1.0, 2.0, 1.5, 2, 3, 2, deformation.clone(), q2);
+                check_def_fd(&cube, 0..cube.get_nelements());
+                check_def_vertices(&cube);
+            }
+        }
+    }
+
+    #[test]
+    fn def_matches_grad_def_circle() {
+        //All cells and boundary edges, arms included (analytic map).
+        for q2 in [None, Some(true)] {
+            for deformation in [None, Some(bending())] {
+                let circle = Circle::new([0.5, 0.25], 2.0, 7, deformation.clone(), q2);
+                check_def_fd(&circle, 0..circle.get_nelements());
+                check_def_vertices(&circle);
+            }
+        }
+    }
+
+    #[test]
+    fn circle_boundary_is_exact() {
+        //Points of the boundary edges lie on the circle, at any u.
+        let (center, radius) = ([0.5, 0.25], 2.0);
+        let circle = Circle::new(center, radius, 7, None, Some(true));
+        for el in circle.get_elements_by_dimension(1) {
+            for u in [0.0, 0.21, 0.5, 0.77, 1.0] {
+                let mut x = [0.0; 3];
+                circle.get_element_def(el, &[u, 0.0, 0.0], &mut x);
+                let r = ((x[0] - center[0]).powi(2) + (x[1] - center[1]).powi(2)).sqrt();
+                assert!((r - radius).abs() < 1e-12, "edge {el}, u = {u}: r = {r}");
+            }
+        }
+    }
+
+    #[test]
+    fn mapped_elements() {
+        let square = Square::new([0.0, 0.0], 1.0, 1.0, 3, 3, None, None);
+        assert!((0..square.get_nelements()).all(|e| !square.is_mapped_element(e)));
+        let square = Square::new([0.0, 0.0], 1.0, 1.0, 3, 3, Some(bending()), None);
+        assert!((0..square.get_nelements()).all(|e| square.is_mapped_element(e)));
+
+        let circle = Circle::new([0.0, 0.0], 1.0, 7, None, None);
+        let n_square = circle.n_x * circle.n_x;
+        for e in circle.get_elements_by_dimension(2) {
+            assert_eq!(circle.is_mapped_element(e), e >= n_square, "cell {e}");
+        }
+        //Converting to an UnstructuredMesh keeps only the nodes: nothing is mapped.
+        let mesh = circle.get_unstructured_mesh();
+        assert!((0..mesh.get_nelements()).all(|e| !mesh.is_mapped_element(e)));
+        let circle = Circle::new([0.0, 0.0], 1.0, 7, Some(rotation()), None);
+        assert!((0..circle.get_nelements()).all(|e| circle.is_mapped_element(e)));
+    }
 }

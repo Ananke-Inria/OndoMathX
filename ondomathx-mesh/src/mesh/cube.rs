@@ -169,6 +169,12 @@ impl Cube {
 }
 
 impl Mesh for Cube {
+    //Structured numbering, any counts.
+    fn get_tensor_numbering(&self, n: [usize; 3]) -> (Vec<Vec<usize>>, usize) {
+        assert!(n.iter().all(|&k| k >= 2), "at least 2 DoFs per direction, got {n:?}");
+        self.get_numbering(n[0], n[1], n[2])
+    }
+
     fn get_deformation(&self) -> Option<&Diffeomorphism> {
         self.deformation.as_ref()
     }

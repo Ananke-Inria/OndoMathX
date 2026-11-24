@@ -41,6 +41,52 @@ pub trait Mesh {
     //in a 2D mesh yields a 2×2, a boundary edge a 2×1 (the tangent vector).
     fn get_element_grad_def(&self, element_index: usize, uvw: &[f64], grad_def: &mut [f64]);
 
+    //Writes into `def` the image x(uvw) of the COMPLETE element map (the map
+    //differentiated by get_element_grad_def), as its first
+    //geometric_dimension entries. The default interpolates the element's
+    //geometric nodes and applies the attached deformation: exact for meshes
+    //whose undeformed geometry is that interpolation (Square, Cube,
+    //UnstructuredMesh). Meshes with an analytic map override it.
+    fn get_element_def(&self, element_index: usize, uvw: &[f64], def: &mut [f64]) {
+        let element = self.get_element(element_index);
+        let geo = element.geometric_element;
+        let mut x = [0.0; 3];
+        for i in 0..geo.nshape_functions {
+            let phi = geo.shape_functions[i](uvw);
+            let node = self.get_node(element.indexes[i]);
+            for a in 0..3 {
+                x[a] += node[a] * phi;
+            }
+        }
+        if let Some(deformation) = self.get_deformation() {
+            let mut f_x = [0.0; 3];
+            deformation.eval(&x, &mut f_x);
+            x = f_x;
+        }
+        let geo_dim = self.get_geometric_dimension();
+        def[..geo_dim].copy_from_slice(&x[..geo_dim]);
+    }
+
+    //Whether the complete map of the element is NOT given by its affine/Q1/Q2
+    //geometric nodes alone: an analytic map (e.g. the arms of Circle) or an
+    //attached deformation. When false, the map is the Lagrange interpolation
+    //of the element's nodes. The default only checks the deformation.
+    fn is_mapped_element(&self, element_index: usize) -> bool {
+        let _ = element_index;
+        self.get_deformation().is_some()
+    }
+
+    //Continuous numbering of a tensor-product DoF layout with n[d] DoFs per
+    //direction of the reference element on every volume element, local index
+    //x-fastest (`i + n0·j + n0·n1·k`): (numbering[element][local], n_dof).
+    //Only the volume elements are guaranteed to be numbered. The default goes
+    //through UnstructuredMesh::get_numbering with a tensor DoFSet, which
+    //requires the same count in every direction (DoFSet symmetry); structured
+    //meshes (Square, Cube) override it and accept anisotropic counts.
+    fn get_tensor_numbering(&self, n: [usize; 3]) -> (Vec<Vec<usize>>, usize) {
+        self.get_unstructured_mesh().get_tensor_numbering(n)
+    }
+
     //Coloring API. Colors are defined only for elements of the highest
     //topological dimension (volume elements); querying the color of a
     //boundary element is a contract violation (implementations may panic).

@@ -144,6 +144,33 @@ impl Mesh for UnstructuredMesh {
             [self.elements_by_color[color_index][element_index_by_color]]
     }
 
+    fn get_tensor_numbering(&self, n: [usize; 3]) -> (Vec<Vec<usize>>, usize) {
+        let dim = self.topologic_dimension;
+        let volume = &self.elements_by_dim[dim];
+        assert!(!volume.is_empty(), "the mesh has no volume elements");
+        assert!(
+            (0..dim).all(|d| n[d] >= 2 && n[d] == n[0]),
+            "tensor numbering through a DoFSet needs the same count (>= 2) in every \
+             direction, got {:?}",
+            &n[..dim]
+        );
+        let reference = self.elements[volume[0]].geometric_element.reference_element;
+        let n0 = n[0];
+        let nloc = n0.pow(dim as u32);
+        let pos_list: Vec<[f64; 3]> = (0..nloc)
+            .map(|l| {
+                let mut p = [0.0; 3];
+                let mut k = l;
+                for p_d in p.iter_mut().take(dim) {
+                    *p_d = (k % n0) as f64 / (n0 - 1) as f64;
+                    k /= n0;
+                }
+                p
+            })
+            .collect();
+        self.get_numbering(&DoFSet::new(pos_list, reference))
+    }
+
     fn get_element_grad_def(&self, e: usize, uvw: &[f64], grad_def: &mut [f64]) {
         let element = &self.elements[e];
         let geo_element = element.geometric_element;
@@ -227,6 +254,39 @@ impl UnstructuredMesh {
     //For an element, the global indices of its vertexes/edges/faces
     pub fn get_neighbour_vertexes(&self, element_index: usize) -> &[usize] {
         &self.neighbour_vertexes[element_index]
+    }
+
+    /// For a boundary element (dimension `topologic_dimension − 1`: an edge in
+    /// 2D, a face in 3D), its parent volume element and the local index of the
+    /// boundary element in it (local edge in 2D, local face in 3D):
+    /// `(volume_element_index, local_facet_index)`. The parent is the first
+    /// volume neighbour of the facet (the only one on the boundary).
+    pub fn get_parent_face(&self, boundary_el: usize) -> (usize, usize) {
+        let dim = self.topologic_dimension;
+        assert!(dim == 2 || dim == 3, "get_parent_face needs a 2D or 3D mesh");
+        let el_dim = self.elements[boundary_el].geometric_element.reference_element.get_dim();
+        assert_eq!(el_dim, dim - 1, "element {boundary_el} is not of dimension {}", dim - 1);
+        let [vol, local] = if dim == 2 {
+            self.edges_neighbour[self.neighbour_edges[boundary_el][0]][0]
+        } else {
+            self.faces_neighbour[self.neighbour_faces[boundary_el][0]][0]
+        };
+        (vol, local)
+    }
+
+    /// The topological boundary: every facet (edge in 2D, face in 3D) of a
+    /// volume element with no other volume neighbour, as
+    /// `(volume_element_index, local_facet_index)`, whether or not a boundary
+    /// element is attached to it.
+    pub fn get_boundary_faces(&self) -> Vec<(usize, usize)> {
+        let dim = self.topologic_dimension;
+        assert!(dim == 2 || dim == 3, "get_boundary_faces needs a 2D or 3D mesh");
+        let neighbours = if dim == 2 { &self.edges_neighbour } else { &self.faces_neighbour };
+        neighbours
+            .iter()
+            .filter(|n| n.len() == 1)
+            .map(|n| (n[0][0], n[0][1]))
+            .collect()
     }
 
     pub fn get_neighbour_edges(&self, element_index: usize) -> &[usize] {

@@ -37,7 +37,12 @@ don't commit generated `.msh` files.
 - `geometric_elements.rs` — reference cell + Lagrange shape functions/gradients =
   `GeometricElement`; also stores the Gmsh `msh_id`. Implemented: EDGE2/EDGE3,
   TRIANGLE3/TRIANGLE6, QUADRANGLE4/QUADRANGLE9, TETRAHEDRON4/TETRAHEDRON10,
-  HEXAHEDRON8/HEXAHEDRON27.
+  HEXAHEDRON8/HEXAHEDRON27. `GeometricElement::tabulate(points)` returns the
+  values and reference gradients of all shape functions at a point set
+  (point-major, `[p * n + k]`, canonical order): the element map at fixed points
+  (quadrature/GLL nodes) is then `x = Σ_k X_k φ_k` from the table (added
+  2026-11-20 for LobattoX, where full tables measured ~2× faster than 1D tensor
+  products).
 - `diffeomorphism.rs` — the `Diffeomorphism` struct (smooth map R^inner → R^outer via
   `diffeo`/`grad_diffeo` fn pointers). `compose` for chaining maps, `grad_eval`
   applies the chain rule, `compose_grad_def` left-multiplies an element Jacobian by
@@ -84,6 +89,28 @@ don't commit generated `.msh` files.
   quad cell in 2D → 2×2, boundary edge → 2×1 (the tangent). Each mesh type
   implements it; the deformation chain rule is shared through
   `Diffeomorphism::compose_grad_def`. FD-validated in `tests/grad_def.rs`.
+- **`get_element_def(el, uvw, def)`** (added 2026-11-20) overwrites
+  `def[..geo_dim]` with the image x(uvw) of the same COMPLETE map that
+  `get_element_grad_def` differentiates. Default: interpolation of the
+  element's geometric nodes, then the attached deformation (exact for Square,
+  Cube, UnstructuredMesh); `Circle` overrides it with circle_map ∘ Q on the
+  element's own region branch. FD-validated against `get_element_grad_def`
+  for every mesh type in `tests/grad_def.rs`.
+- **`is_mapped_element(el)`** (added 2026-11-20): `true` when the complete
+  map is not the Lagrange interpolation of the element's affine/Q1/Q2
+  geometric nodes (analytic map or attached deformation). Default:
+  `get_deformation().is_some()`; `Circle`: arms always, inner-square cells only
+  if deformed. A converted `UnstructuredMesh` is never mapped (only the nodes
+  are transferred).
+- **`get_tensor_numbering(n)`** (added 2026-11-20): continuous numbering of a
+  tensor DoF layout with `n[d]` DoFs per direction on every volume element,
+  local index x-fastest; only volume elements are guaranteed to be numbered.
+  Default: `get_unstructured_mesh()` then `UnstructuredMesh`'s version, a
+  tensor `DoFSet` through `get_numbering` (same count in every direction,
+  panics otherwise, `DoFSet` symmetry). `Square`/`Cube` override it with their
+  structured `get_numbering` (anisotropic counts allowed). Validated
+  geometrically (copies coincide, distinct DoFs distinct) in
+  `tests/tensor_numbering.rs`.
 - **`grad_diffeo(params, xyz, grad)`** WRITES the Jacobian Df row-major
   `outer_dim × inner_dim`; it never reads or multiplies the buffer. All chain-rule
   products are done by the library (`grad_eval`, `compose_grad_def`).
@@ -204,8 +231,12 @@ and Q2, supports mixed-dimension meshes.
 
 ## Open work (roadmap order)
 
-1. **`get_parent_face` / `get_parent_edge`** — the boundary-model gap (see sketch
-   above).
+1. ~~**`get_parent_face`**~~ — done (2026-11-20): `UnstructuredMesh::get_parent_face(boundary_el)
+   -> (volume_element, local_facet)` for elements of dimension
+   `topologic_dimension − 1` (edge in 2D, face in 3D), and
+   `get_boundary_faces()` (every facet with a single volume neighbour, labelled
+   or not); `tests/boundary.rs`. Used by LobattoX for homogeneous Dirichlet
+   masks. `get_parent_edge` (edges of 3D meshes) is still open.
 2. **Parser rewrite** — `MeshError` with file path + line number instead of unwrap
    panics, `split_whitespace` + `\r` robustness, single-pass reading, and full
    semantic validation (index ranges, counts vs headers, tag consistency).
