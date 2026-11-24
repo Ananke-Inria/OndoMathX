@@ -5,6 +5,7 @@ version = 4
 [[package]]
 name = "anamesh"
 version = "0.1.0"
+source = "git+https://github.com/OndoMathX/Rouage.git#4702c8c56617dee48643ee1934c83323755491a4"
 dependencies = [
  "itertools",
  "serde",

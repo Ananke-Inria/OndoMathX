@@ -6,9 +6,9 @@ description = "Matrix-free spectral elements on quadrangle and hexahedron meshes
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-# anamesh: path dependency while the APIs co-evolve. lobatto: version
+# anamesh: git dependency (repository Rouage). lobatto: version
 # dependency (QuadratiX rule: published crates only).
-anamesh = { path = "../Anamesh" }
+anamesh = { git = "https://github.com/OndoMathX/Rouage.git" }
 lobatto = "0.1.4"
 nalgebra = "0.34"
 rayon = "1"
