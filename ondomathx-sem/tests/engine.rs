@@ -97,7 +97,7 @@ fn reference<const D: usize, S: Shape<D>, const C: usize, K: PointKernel<D, C>>(
         }
     };
     let mut y = vec![0.0; u.len()];
-    for e in 0..space.n_elem() {
+    for e in 0..space.num_elements() {
         let ue = &u[e * C * nloc..(e + 1) * C * nloc];
         let ye = &mut y[e * C * nloc..(e + 1) * C * nloc];
         for q in 0..nloc {
@@ -114,7 +114,7 @@ fn reference<const D: usize, S: Shape<D>, const C: usize, K: PointKernel<D, C>>(
                 value: SVector::from_fn(|c, _| ue[c * nloc + q]),
                 grad: gu * jinv_t.transpose(),
                 xyz: x,
-                label: space.label(e),
+                label: space.get_label(e),
                 dof: e * nloc + q,
             };
             let mut out = PointOut::<D, C> {
@@ -172,14 +172,14 @@ fn apply<const D: usize, S: Shape<D>, const C: usize, K: PointKernel<D, C>>(
     u: &[f64],
 ) -> Vec<f64> {
     let mut v = vec![f64::NAN; u.len()];
-    space.mlt_add(k, 1.0, u, 0.0, &mut v);
+    space.mlt_dg(k, u, &mut v, 1.0);
     v
 }
 
 fn everything<const D: usize, S: Shape<D>>(space: &Space<D, S>) -> Everything {
     Everything {
         r: vec![0.5, 1.5, 2.5],
-        q: seeded(space.n_dup(), 7).iter().map(|x| x.abs()).collect(),
+        q: seeded(space.num_dg_dofs(), 7).iter().map(|x| x.abs()).collect(),
     }
 }
 
@@ -194,7 +194,7 @@ fn check_vs_reference<const D: usize, S: Shape<D>>(mesh: &UnstructuredMesh, what
     let space = Space::<D, S>::new(mesh, numbering);
     let n = &S::N[..D];
     let k = everything(&space);
-    let u = seeded(space.n_dup(), 1);
+    let u = seeded(space.num_dg_dofs(), 1);
     assert_close(
         &apply(&space, &k, &u),
         &reference(&space, &k, &u),
@@ -205,9 +205,9 @@ fn check_vs_reference<const D: usize, S: Shape<D>>(mesh: &UnstructuredMesh, what
         lambda: 2.0,
         mu: 0.7,
     };
-    let u = seeded(space.n_dup() * D, 2);
+    let u = seeded(space.num_dg_dofs() * D, 2);
     let mut v = vec![f64::NAN; u.len()];
-    space.mlt_add::<D>(&el, 1.0, &u, 0.0, &mut v);
+    space.mlt_dg::<D>(&el, &u, &mut v, 1.0);
     assert_close(
         &v,
         &reference::<D, S, D, _>(&space, &el, &u),
@@ -284,7 +284,7 @@ fn check_3d<const NP: usize>() {
         let space = Space::<3, Iso3<NP>>::new(&mesh, Numbering::Continuous);
         assert!(!space.elements(GeoKind::Affine).is_empty(), "q2={q2}");
         assert!(
-            space.elements(GeoKind::Affine).len() < space.n_elem(),
+            space.elements(GeoKind::Affine).len() < space.num_elements(),
             "q2={q2}"
         );
         check_vs_reference::<3, Iso3<NP>>(&mesh, &format!("3D partial q2={q2}"));
@@ -325,14 +325,14 @@ fn batch_width_does_not_change_the_result() {
     let mesh = square(5, 3, true, Some(partial_2d()));
     let space = Space::<2, Iso2<5>>::new(&mesh, Numbering::Continuous);
     let k = everything(&space);
-    let u = seeded(space.n_dup(), 3);
+    let u = seeded(space.num_dg_dofs(), 3);
     let run = |w: usize| {
         let mut v = vec![0.0; u.len()];
         match w {
-            1 => space.mlt_add_batched::<1, 1>(&k, 1.0, &u, 0.0, &mut v),
-            3 => space.mlt_add_batched::<1, 3>(&k, 1.0, &u, 0.0, &mut v),
-            4 => space.mlt_add_batched::<1, 4>(&k, 1.0, &u, 0.0, &mut v),
-            _ => space.mlt_add_batched::<1, 8>(&k, 1.0, &u, 0.0, &mut v),
+            1 => space.mlt_batched_dg::<1, 1>(&k, &u, &mut v, 1.0),
+            3 => space.mlt_batched_dg::<1, 3>(&k, &u, &mut v, 1.0),
+            4 => space.mlt_batched_dg::<1, 4>(&k, &u, &mut v, 1.0),
+            _ => space.mlt_batched_dg::<1, 8>(&k, &u, &mut v, 1.0),
         }
         v
     };
@@ -343,19 +343,20 @@ fn batch_width_does_not_change_the_result() {
 }
 
 #[test]
-fn alpha_beta_semantics() {
+fn mlt_dg_and_mlt_add_dg_semantics() {
     let mesh = square(3, 2, false, Some(bending_2d()));
     let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
-    let u = seeded(space.n_dup(), 4);
-    let v0 = seeded(space.n_dup(), 5);
+    let u = seeded(space.num_dg_dofs(), 4);
+    let v0 = seeded(space.num_dg_dofs(), 5);
     let au = apply(&space, &Laplace, &u);
     let mut v = v0.clone();
-    space.mlt_add(&Laplace, 2.0, &u, 0.5, &mut v);
+    v.iter_mut().for_each(|x| *x *= 0.5);
+    space.mlt_add_dg(&Laplace, &u, &mut v, 2.0);
     let expected: Vec<f64> = v0.iter().zip(&au).map(|(a, b)| 0.5 * a + 2.0 * b).collect();
-    assert_close(&v, &expected, 1e-14, "β·v + α·A·u");
-    // β = 0 never reads v: NaN input must not leak.
-    let mut v = vec![f64::NAN; space.n_dup()];
-    space.mlt_add(&Laplace, 1.0, &u, 0.0, &mut v);
+    assert_close(&v, &expected, 1e-14, "v + α·A·u");
+    // mlt_dg never reads v: NaN input must not leak.
+    let mut v = vec![f64::NAN; space.num_dg_dofs()];
+    space.mlt_dg(&Laplace, &u, &mut v, 1.0);
     assert!(v.iter().all(|x| x.is_finite()));
 }
 
@@ -366,16 +367,16 @@ fn laplace_is_symmetric_and_kills_constants() {
         square(5, 3, false, Some(partial_2d())),
     ] {
         let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
-        let (u, w) = (seeded(space.n_dup(), 8), seeded(space.n_dup(), 9));
+        let (u, w) = (seeded(space.num_dg_dofs(), 8), seeded(space.num_dg_dofs(), 9));
         let (au, aw) = (apply(&space, &Laplace, &u), apply(&space, &Laplace, &w));
         let (a, b) = (dot(&w, &au), dot(&u, &aw));
         assert!((a - b).abs() <= 1e-12 * a.abs().max(1.0), "{a} vs {b}");
-        let a1 = apply(&space, &Laplace, &vec![1.0; space.n_dup()]);
+        let a1 = apply(&space, &Laplace, &vec![1.0; space.num_dg_dofs()]);
         assert!(a1.iter().all(|x| x.abs() < 1e-11), "A·1 ≠ 0");
     }
     let mesh = cube([2, 2, 2], true, Some(bending_3d()));
     let space = Space::<3, Iso3<3>>::new(&mesh, Numbering::Continuous);
-    let a1 = apply(&space, &Laplace, &vec![1.0; space.n_dup()]);
+    let a1 = apply(&space, &Laplace, &vec![1.0; space.num_dg_dofs()]);
     assert!(a1.iter().all(|x| x.abs() < 1e-11), "3D A·1 ≠ 0");
 }
 
@@ -396,15 +397,15 @@ fn laplace_energy_of_linear_fields() {
 fn mass_operator_matches_inverse_mass() {
     let mesh = square(4, 3, true, Some(bending_2d()));
     let space = Space::<2, Iso2<5>>::new(&mesh, Numbering::Continuous);
-    let mut m = apply(&space, &Mass(1.0), &vec![1.0; space.n_dup()]);
-    space.c_sum_shared::<1>(&mut m);
+    let mut m = apply(&space, &Mass(1.0), &vec![1.0; space.num_dg_dofs()]);
+    space.sum_shared::<1>(&mut m);
     let inv = space
-        .c_inverse_mass(&Constant(1.0))
+        .inverse_mass(&Constant(1.0))
         .diagonal()
         .unwrap()
         .to_vec();
     let expected: Vec<f64> = inv.iter().map(|x| 1.0 / x).collect();
-    assert_close(&m, &expected, 1e-14, "Σ_shared(M·1) vs 1/inverse_mass");
+    assert_close(&m, &expected, 1e-14, "Σ_shared(M·1) vs 1/inverse_mass_dg");
 }
 
 #[test]
@@ -422,7 +423,7 @@ fn elastic_rigid_modes_and_energy() {
         ] {
             let u = space.sample::<2>(f);
             let mut v = vec![0.0; u.len()];
-            space.mlt_add::<2>(el, 1.0, &u, 0.0, &mut v);
+            space.mlt_dg::<2>(el, &u, &mut v, 1.0);
             assert!(
                 v.iter().all(|x| x.abs() < 1e-11),
                 "N={:?}: rigid mode not in kernel",
@@ -446,7 +447,7 @@ fn elastic_rigid_modes_and_energy() {
     ] {
         let u = space.sample::<3>(f);
         let mut v = vec![0.0; u.len()];
-        space.mlt_add::<3>(&el, 1.0, &u, 0.0, &mut v);
+        space.mlt_dg::<3>(&el, &u, &mut v, 1.0);
         assert!(
             v.iter().all(|x| x.abs() < 1e-11),
             "3D rigid mode not in kernel"
@@ -457,7 +458,7 @@ fn elastic_rigid_modes_and_energy() {
     let space = Space::<2, Iso2<3>>::new(&square(3, 2, false, None), Numbering::Continuous);
     let u = space.sample::<2>(|x| [0.3 * x[0] + 0.2 * x[1], 0.2 * x[0] - 0.1 * x[1]]);
     let mut v = vec![0.0; u.len()];
-    space.mlt_add::<2>(&el, 1.0, &u, 0.0, &mut v);
+    space.mlt_dg::<2>(&el, &u, &mut v, 1.0);
     let exact = 2.0 * (2.0 * 0.2f64.powi(2) + 2.0 * 0.7 * (0.09 + 0.01 + 2.0 * 0.04));
     let e = dot(&u, &v);
     assert!((e - exact).abs() < 1e-12, "elastic energy {e} vs {exact}");

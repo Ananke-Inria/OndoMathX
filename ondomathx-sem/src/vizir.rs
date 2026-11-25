@@ -22,22 +22,20 @@
 //! - One element type per mesh (QUADRANGLE4/9 or HEXAHEDRON8/27) and an
 //!   isotropic shape (one degree): the writer panics otherwise.
 
-use std::fs::File;
-use std::io::{self, BufWriter, Write};
+use std::io;
 use std::path::Path;
 
 use ondomathx_mesh::mesh::Mesh;
-use rayon::prelude::*;
+use ondomathx_toolbox::io_vizir::HoSolution;
 
 use crate::shape::Shape;
 use crate::space::Space;
 
-/// Writer of Vizir `.sol` files for one space.
+/// Writer of Vizir `.sol` files for one space (the format:
+/// `ondomathx_toolbox::io_vizir`).
 pub struct VizirWriter {
-    /// Header up to the element count (positions included).
-    header: Vec<u8>,
+    sol: HoSolution,
     tag: &'static str,
-    degree: usize,
     nloc: usize,
     /// Storage elements in the order of the `.mesh` section.
     order: Vec<usize>,
@@ -61,7 +59,7 @@ impl VizirWriter {
         };
         let id = msh_id(0);
         assert!(
-            (0..space.n_elem()).all(|e| msh_id(e) == id),
+            (0..space.num_elements()).all(|e| msh_id(e) == id),
             "Vizir HOSolAt needs a single volume element type"
         );
         let tag = match (D, id) {
@@ -72,28 +70,11 @@ impl VizirWriter {
             _ => panic!("Vizir HOSolAt: unsupported element type (gmsh {id}) in {D}D"),
         };
         let nloc = S::NLOC;
-        let mut header = Vec::new();
-        write!(
-            header,
-            "MeshVersionFormatted 2\nDimension\n3\nHOSolAt{tag}NodesPositions\n{nloc}\n"
-        )
-        .unwrap();
-        for node in 0..nloc {
-            for x in space.ref_point(node) {
-                write!(header, "{x} ").unwrap();
-            }
-            header.push(b'\n');
-        }
-        write!(header, "HOSolAt{tag}\n{}\n", space.n_elem()).unwrap();
-        let mut order: Vec<usize> = (0..space.n_elem()).collect();
+        let positions: Vec<Vec<f64>> = (0..nloc).map(|node| space.loc_dof_coordinates(node).to_vec()).collect();
+        let sol = HoSolution::new(tag, S::N[0] - 1, &positions, space.num_elements());
+        let mut order: Vec<usize> = (0..space.num_elements()).collect();
         order.sort_by_key(|&e| space.mesh_element(e));
-        VizirWriter {
-            header,
-            tag,
-            degree: S::N[0] - 1,
-            nloc,
-            order,
-        }
+        VizirWriter { sol, tag, nloc, order }
     }
 
     /// Geometric tag (`QuadrilateralsQ1`, …, `HexahedraQ2`).
@@ -106,29 +87,7 @@ impl VizirWriter {
     pub fn write(&self, path: impl AsRef<Path>, data: &[f64], components: usize) -> io::Result<()> {
         let (nloc, c) = (self.nloc, components);
         assert_eq!(data.len(), self.order.len() * c * nloc, "data length");
-        let rows: Vec<Vec<u8>> = self
-            .order
-            .par_iter()
-            .map(|&e| {
-                let block = &data[e * c * nloc..(e + 1) * c * nloc];
-                let mut b = Vec::with_capacity(nloc * c * 24);
-                for node in 0..nloc {
-                    for k in 0..c {
-                        write!(b, "{} ", block[k * nloc + node]).unwrap();
-                    }
-                }
-                b.push(b'\n');
-                b
-            })
-            .collect();
-        let mut out = BufWriter::new(File::create(path)?);
-        out.write_all(&self.header)?;
-        writeln!(out, "1 {c}")?;
-        writeln!(out, "{} {nloc}", self.degree)?;
-        for r in &rows {
-            out.write_all(r)?;
-        }
-        out.write_all(b"End\n")?;
-        out.flush()
+        self.sol
+            .write(path, c, |row, node, k| data[self.order[row] * c * nloc + k * nloc + node])
     }
 }

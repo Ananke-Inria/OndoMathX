@@ -50,43 +50,41 @@ where
         .quadrature::<QM>(GeoStorage::Store)
         .build();
     let lambda = 1e3;
-    let u = seeded(disp.n_dup() * D, 1);
-    let y0 = seeded(disp.n_dup() * D, 2);
+    let u = seeded(disp.num_dg_dofs() * D, 1);
+    let y0 = seeded(disp.num_dg_dofs() * D, 2);
 
     // Three global operators.
-    let mut p = vec![0.0; pres.n_dup()];
-    disp.mlt_add_mixed::<QB, D, 1, _>(
+    let mut p = vec![0.0; pres.num_dg_dofs()];
+    disp.mlt_mixed_dg::<QB, D, 1, _>(
         &pres,
         &Divergence {
             coef: Constant(1.0),
         },
-        1.0,
         &u,
-        0.0,
         &mut p,
+        1.0,
     );
     let bu = p.clone();
-    pres.inverse_mass_with::<QM>(&Constant(c))
+    pres.inverse_mass_with_dg::<QM>(&Constant(c))
         .apply::<1>(&mut p);
     let mut a = y0.clone();
-    pres.mlt_add_mixed::<QB, 1, D, _>(
+    pres.mlt_add_mixed_dg::<QB, 1, D, _>(
         &disp,
         &DivergenceTranspose {
             coef: Constant(1.0),
         },
-        lambda,
         &p,
-        1.0,
         &mut a,
+        lambda,
     );
 
     // Fused.
     let kp = FusedKp::<D, SU, SP, QB, QM>::new(&disp, &pres, c);
     let mut b = y0.clone();
-    disp.mlt_add_element(&disp, &kp, lambda, &u, 1.0, &mut b);
+    disp.mlt_add_element_dg(&disp, &kp, &u, &mut b, lambda);
 
     let mut k = vec![0.0; u.len()];
-    disp.mlt_add_element(&disp, &kp, 1.0, &u, 0.0, &mut k);
+    disp.mlt_element_dg(&disp, &kp, &u, &mut k, 1.0);
     let dot = |x: &[f64], y: &[f64]| x.iter().zip(y).map(|(a, b)| a * b).sum::<f64>();
     let diff: Vec<f64> = a.iter().zip(&y0).map(|(x, y)| x - y).collect();
     let fused: Vec<f64> = b.iter().zip(&y0).map(|(x, y)| x - y).collect();

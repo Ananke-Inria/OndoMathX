@@ -1,4 +1,4 @@
-//! Hand-written element operators (`ElementOperator`, `mlt_add_element`).
+//! Hand-written element operators (`ElementOperator`, `mlt_element_dg`).
 
 mod common;
 
@@ -50,18 +50,17 @@ impl<const D: usize, S: Shape<D>> ElementOperator<D, S, S, 1, 1> for NodalMass {
 fn hand_written_mass_equals_the_kernel_engine() {
     let mesh = square(5, 3, true, Some(partial_2d()));
     let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
-    let u = seeded(space.n_dup(), 1);
+    let u = seeded(space.num_dg_dofs(), 1);
     let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    space.mlt_add::<1>(
+    space.mlt_dg::<1>(
         &Mass {
             coef: Constant(1.7),
         },
-        1.0,
         &u,
-        0.0,
         &mut a,
+        1.0,
     );
-    space.mlt_add_element(&space, &NodalMass { c: 1.7 }, 1.0, &u, 0.0, &mut b);
+    space.mlt_element_dg(&space, &NodalMass { c: 1.7 }, &u, &mut b, 1.0);
     assert_eq!(a, b);
 }
 
@@ -111,15 +110,16 @@ fn per_element_data_labels_and_update() {
     assert!(!space.elements(GeoKind::Affine).is_empty() && !space.elements(GeoKind::Q1).is_empty());
     let n = Space::<2, Iso2<3>>::NLOC;
     let op = PerElement {
-        scale: (0..space.n_elem()).map(|e| 1.0 + e as f64).collect(),
+        scale: (0..space.num_elements()).map(|e| 1.0 + e as f64).collect(),
     };
-    let u = seeded(space.n_dup() * 2, 2);
-    let v0 = seeded(space.n_dup(), 3);
+    let u = seeded(space.num_dg_dofs() * 2, 2);
+    let v0 = seeded(space.num_dg_dofs(), 3);
     let mut v = v0.clone();
-    space.mlt_add_element(&space, &op, 2.0, &u, 0.5, &mut v);
-    for e in 0..space.n_elem() {
+    v.iter_mut().for_each(|x| *x *= 0.5);
+    space.mlt_add_element_dg(&space, &op, &u, &mut v, 2.0);
+    for e in 0..space.num_elements() {
         for node in 0..n {
-            let y = op.scale[e] * u[(2 * e + 1) * n + node] + space.label(e) as f64;
+            let y = op.scale[e] * u[(2 * e + 1) * n + node] + space.get_label(e) as f64;
             let expected = 0.5 * v0[e * n + node] + 2.0 * y;
             assert_eq!(v[e * n + node], expected, "e {e} node {node}");
         }
@@ -158,14 +158,13 @@ fn quadrature_through_the_batch() {
     let space = Space::<2, Iso2<3>>::builder(&mesh)
         .quadrature::<G>(GeoStorage::Recompute)
         .build();
-    let mut v = vec![0.0; space.n_dup()];
-    space.mlt_add_element(
+    let mut v = vec![0.0; space.num_dg_dofs()];
+    space.mlt_element_dg(
         &space,
         &Area::<G>(Default::default()),
-        1.0,
         &v.clone(),
-        0.0,
         &mut v,
+        1.0,
     );
     let area: f64 = v.iter().sum();
     assert!((area - 2.6).abs() < 1e-12, "{area}");
@@ -176,7 +175,7 @@ fn quadrature_through_the_batch() {
 fn element_operator_on_different_meshes_panics() {
     let a = Space::<2, Iso2<3>>::new(&square(2, 2, false, None), Numbering::None);
     let b = Space::<2, Iso2<3>>::new(&square(3, 2, false, None), Numbering::None);
-    let u = vec![0.0; a.n_dup()];
-    let mut v = vec![0.0; b.n_dup()];
-    a.mlt_add_element(&b, &NodalMass { c: 1.0 }, 1.0, &u, 0.0, &mut v);
+    let u = vec![0.0; a.num_dg_dofs()];
+    let mut v = vec![0.0; b.num_dg_dofs()];
+    a.mlt_element_dg(&b, &NodalMass { c: 1.0 }, &u, &mut v, 1.0);
 }

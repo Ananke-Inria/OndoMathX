@@ -1,7 +1,7 @@
 //! Hand-written element operators: the shared driver of the matrix-free
 //! products and the hook to plug a local operator into it.
 //!
-//! [`Space::mlt_add_element`] does the plumbing common to every operator: loop over
+//! [`Space::mlt_element_dg`] does the plumbing common to every operator: loop over
 //! the geometric groups, batches of `W` elements, parallel chunks, per-task
 //! scratch, gather of `u` into lobatto's batched layout `[c][node][lane]`,
 //! scatter of `β·v + α·y`, size and same-mesh checks. An
@@ -12,7 +12,7 @@
 //! data (indexed by [`Batch::element`]), e.g. local inverse masses or
 //! boundary matrices.
 //!
-//! [`Space::mlt_add_mixed`](crate::Space::mlt_add_mixed) (and [`Space::mlt_add`], on the node rule) is the
+//! [`Space::mlt_mixed_dg`](crate::Space::mlt_mixed_dg) (and [`Space::mlt_dg`], on the node rule) is the
 //! generic implementation: a pointwise kernel at the points of a quadrature
 //! ([`crate::Pointwise`]).
 
@@ -81,7 +81,7 @@ impl<const D: usize, SU: Shape<D>, SV: Shape<D>> Batch<'_, D, SU, SV> {
     /// Mesh label of lane `lane`.
     #[inline]
     pub fn label(&self, lane: usize) -> usize {
-        self.u_space.label(self.element(lane))
+        self.u_space.get_label(self.element(lane))
     }
 
     /// `(x, det J, cof J)` at point `p` of `set` for lane `lane` (stored or
@@ -112,7 +112,7 @@ impl<const D: usize, SU: Shape<D>, SV: Shape<D>> Batch<'_, D, SU, SV> {
     }
 }
 
-/// A local operator `v_e ← A_e u_e`, applied by [`Space::mlt_add_element`] to
+/// A local operator `v_e ← A_e u_e`, applied by [`Space::mlt_element_dg`] to
 /// batches of `W` elements: `u` holds the gathered input `[c][node][lane]`
 /// (`CU · SU::NLOC · W`), `v` receives the local result `[c][node][lane]`
 /// (`CV · SV::NLOC · W`, to be overwritten entirely).
@@ -143,27 +143,43 @@ pub trait ElementOperator<
 }
 
 impl<const D: usize, SU: Shape<D>> Space<D, SU> {
-    /// `v ← β·v + α·A·u` for the element operator `op` from this space
-    /// (trial, `CU` components) to `v_space` (test, `CV` components), batches
-    /// of 4 elements. With `β = 0`, `v` is overwritten. The output is
-    /// element-local. `CU` and `CV` are inferred from the operator:
-    /// `disp.mlt_add_element(&disp, &kp, λ, &u, 1.0, &mut y)`.
+    /// `v ← α·A·u` for the element operator `op` from this space (trial, `CU`
+    /// components) to `v_space` (test, `CV` components), batches of 4
+    /// elements; `v` is overwritten (never read). The output is
+    /// element-local. [`Space::mlt_add_element_dg`] accumulates instead.
     ///
     /// Panics if the spaces come from different meshes or on wrong lengths.
-    pub fn mlt_add_element<const CU: usize, const CV: usize, SV: Shape<D>>(
+    pub fn mlt_element_dg<const CU: usize, const CV: usize, SV: Shape<D>>(
         &self,
         v_space: &Space<D, SV>,
         op: &impl ElementOperator<D, SU, SV, CU, CV>,
-        alpha: f64,
         u: &[f64],
-        beta: f64,
         v: &mut [f64],
+        alpha: f64,
     ) {
-        mlt_add_element_batched::<D, SU, SV, CU, CV, _, 4>(self, v_space, op, alpha, u, beta, v);
+        mlt_add_element_batched::<D, SU, SV, CU, CV, _, 4>(self, v_space, op, alpha, u, 0.0, v);
+    }
+
+    /// `v ← v + α·A·u` for the element operator `op` (as
+    /// [`Space::mlt_element_dg`]). `CU` and `CV` are inferred from the operator:
+    /// `disp.mlt_add_element_dg(&disp, &kp, &u, &mut y, λ)`.
+    ///
+    /// Panics if the spaces come from different meshes or on wrong lengths.
+    pub fn mlt_add_element_dg<const CU: usize, const CV: usize, SV: Shape<D>>(
+        &self,
+        v_space: &Space<D, SV>,
+        op: &impl ElementOperator<D, SU, SV, CU, CV>,
+        u: &[f64],
+        v: &mut [f64],
+        alpha: f64,
+    ) {
+        mlt_add_element_batched::<D, SU, SV, CU, CV, _, 4>(self, v_space, op, alpha, u, 1.0, v);
     }
 }
 
-/// [`Space::mlt_add_element`] with an explicit batch width `W`.
+/// The driver of [`Space::mlt_element_dg`] / [`Space::mlt_add_element_dg`]
+/// with an explicit batch width `W`: `v ← β·v + α·A·u`, `β = 0` never
+/// reading `v`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mlt_add_element_batched<
     const D: usize,
@@ -192,7 +208,7 @@ pub(crate) fn mlt_add_element_batched<
         "element operator between spaces built from different meshes"
     );
     let (nu, nv) = (SU::NLOC, SV::NLOC);
-    let n_elem = u_space.n_elem();
+    let n_elem = u_space.num_elements();
     assert_eq!(u.len(), n_elem * CU * nu, "u length");
     assert_eq!(v.len(), n_elem * CV * nv, "v length");
     let (block_u, block_v) = (CU * nu, CV * nv);

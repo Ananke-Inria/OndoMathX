@@ -73,7 +73,7 @@ impl<const D: usize> Field<D> for Function {
     }
 }
 
-/// One value per duplicated node (`n_dup` entries, indexed by `e·NLOC + node`).
+/// One value per duplicated node (`num_dg_dofs` entries, indexed by `e·NLOC + node`).
 #[derive(Clone, Debug)]
 pub struct PointData(pub Vec<f64>);
 

@@ -3,15 +3,15 @@
 //!
 //! With the diagonal GLL mass, a leapfrog step for `M ü + K u = F` is
 //! ```text
-//! a    = M⁻¹ (F − K uⁿ)                      // c_apply + InverseMass::apply
+//! a    = M⁻¹ (F − K uⁿ)                      // mlt_assembled + InverseMass::apply
 //! uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ + dt² a
 //! ```
 //! with `dt = 0.95 · 2 / √λ_max(M⁻¹K)` (95 % of the leapfrog limit, `λ_max`
-//! from [`Space::c_max_eigenvalue`] or `ondomathx_toolbox::lal::power_iteration`);
+//! from [`Space::max_eigenvalue`] or `ondomathx_toolbox::lal::power_iteration`);
 //! [`Space::axpby_diag`] does `M⁻¹` and the update in one pass, after
-//! `c_apply`. For continuous vectors the
+//! `mlt_assembled`. For continuous vectors the
 //! duplicated storage needs no assembly to evaluate energies:
-//! `⟨K u, w⟩ = dot(K_loc u, w)` with `K_loc u` from [`Space::mlt_add`] and
+//! `⟨K u, w⟩ = dot(K_loc u, w)` with `K_loc u` from [`Space::mlt_dg`] and
 //! `dot` from `ondomathx_toolbox::lal`, and
 //! `⟨u, w⟩_M = mass_inner(local_mass, u, w)`.
 
@@ -25,24 +25,24 @@ use crate::space::Space;
 
 impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Assembled operator of the continuous space: `out = Σ_shared(K_loc u)`,
-    /// i.e. [`Space::mlt_add`] with `α = 1`, `β = 0` followed by
-    /// [`Space::c_sum_shared`]. `out` is overwritten.
-    pub fn c_apply<const C: usize>(
+    /// i.e. [`Space::mlt_dg`] with `α = 1` followed by
+    /// [`Space::sum_shared`]. `out` is overwritten.
+    pub fn mlt_assembled<const C: usize>(
         &self,
         kernel: &impl PointKernel<D, C>,
         u: &[f64],
         out: &mut [f64],
     ) {
-        self.mlt_add::<C>(kernel, 1.0, u, 0.0, out);
-        self.c_sum_shared::<C>(out);
+        self.mlt_dg::<C>(kernel, u, out, 1.0);
+        self.sum_shared::<C>(out);
     }
 
     /// `v[e][c][node] *= diag[e·NLOC + node]` for every component `c`: applies
     /// a one-value-per-node diagonal to a `C`-component vector.
     pub fn scale_by<const C: usize>(&self, diag: &[f64], v: &mut [f64]) {
         let nloc = Self::NLOC;
-        assert_eq!(diag.len(), self.n_dup(), "diagonal length");
-        assert_eq!(v.len(), self.n_dup() * C, "vector length");
+        assert_eq!(diag.len(), self.num_dg_dofs(), "diagonal length");
+        assert_eq!(v.len(), self.num_dg_dofs() * C, "vector length");
         scale_nodes::<C>(nloc, diag, v);
     }
 
@@ -67,7 +67,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         y: &[f64],
         z: Option<(f64, &[f64])>,
     ) {
-        assert_eq!(diag.len(), self.n_dup(), "diagonal length");
+        assert_eq!(diag.len(), self.num_dg_dofs(), "diagonal length");
         lal::axpby_diag::<C>(Self::NLOC, a, x, b, out, c, diag, y, z);
     }
 
@@ -78,9 +78,9 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// the numbering.
     pub fn mass_inner<const C: usize>(&self, m: &[f64], a: &[f64], b: &[f64]) -> f64 {
         let nloc = Self::NLOC;
-        assert_eq!(m.len(), self.n_dup(), "mass length");
-        assert_eq!(a.len(), self.n_dup() * C, "a length");
-        assert_eq!(b.len(), self.n_dup() * C, "b length");
+        assert_eq!(m.len(), self.num_dg_dofs(), "mass length");
+        assert_eq!(a.len(), self.num_dg_dofs() * C, "a length");
+        assert_eq!(b.len(), self.num_dg_dofs() * C, "b length");
         a.par_chunks(C * nloc)
             .zip(b.par_chunks(C * nloc))
             .zip(m.par_chunks(nloc))
@@ -100,10 +100,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
 
     /// Fixed pseudo-random continuous `C`-component vector (a hash of the copy
     /// index, averaged over the copies): rough, so rich in the high modes,
-    /// and reproducible. The start of [`Space::c_max_eigenvalue`]. Panics
+    /// and reproducible. The start of [`Space::max_eigenvalue`]. Panics
     /// without the continuous numbering.
-    pub fn c_start_vector<const C: usize>(&self) -> Vec<f64> {
-        let n = self.n_dup() * C;
+    pub fn start_vector<const C: usize>(&self) -> Vec<f64> {
+        let n = self.num_dg_dofs() * C;
         let nloc = Self::NLOC;
         let mut x: Vec<f64> = (0..n)
             .into_par_iter()
@@ -115,8 +115,8 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
                 (h >> 11) as f64 / (1u64 << 53) as f64 - 0.5
             })
             .collect();
-        self.c_sum_shared::<C>(&mut x);
-        let mult = self.c_multiplicity();
+        self.sum_shared::<C>(&mut x);
+        let mult = self.multiplicity_dg();
         x.par_chunks_mut(nloc).enumerate().for_each(|(k, comp)| {
             let e = k / C;
             for (v, mu) in comp.iter_mut().zip(&mult[e * nloc..(e + 1) * nloc]) {
@@ -129,10 +129,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Largest eigenvalue of `M⁻¹K` on the continuous space by power iteration,
     /// `K` the operator of `kernel` and `M` the lumped mass of coefficient
     /// `mass`: `ondomathx_toolbox::lal::power_iteration` from
-    /// [`Space::c_start_vector`], with `K x = Σ_shared(K_loc x)`, the inverse
+    /// [`Space::start_vector`], with `K x = Σ_shared(K_loc x)`, the inverse
     /// lumped mass and the GLL mass product. Panics without the continuous
     /// numbering.
-    pub fn c_max_eigenvalue<const C: usize>(
+    pub fn max_eigenvalue<const C: usize>(
         &self,
         kernel: &impl PointKernel<D, C>,
         mass: &impl Field<D>,
@@ -140,12 +140,12 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         rtol: f64,
     ) -> EigenEstimate {
         let m = self.local_mass(mass);
-        let inv_m = self.c_inverse_mass(mass);
+        let inv_m = self.inverse_mass(mass);
         lal::power_iteration(
             |y| inv_m.apply::<C>(y),
-            |x, y| self.c_apply::<C>(kernel, x, y),
+            |x, y| self.mlt_assembled::<C>(kernel, x, y),
             |a, b| self.mass_inner::<C>(&m, a, b),
-            self.c_start_vector::<C>(),
+            self.start_vector::<C>(),
             rtol,
             max_iter,
         )

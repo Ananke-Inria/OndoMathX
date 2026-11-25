@@ -30,14 +30,14 @@ pub type PressureMass3 = Quad3<Gl<3>, Gl<3>, Gl<3>>;
 ///   reference gradients of the Q2 basis;
 /// - `(M^P)⁻¹`: the pressure mass `∫ c p q` with 3 Gauss–Legendre points per
 ///   direction, inverted per element in tensor form (`B_P W⁻¹ B_Pᵀ`, as
-///   `FusedKp` / `Space::inverse_mass_with`);
+///   `FusedKp` / `Space::inverse_mass_with_dg`);
 /// - `Bᵀ` by the same formula, transposed.
 ///
 /// cornea's hard-coded Q2 → Q4 interpolation functions are lobatto's
 /// rectangular kernels at the fixed sizes 3 → 5. The rule [`PressureMass2`] /
 /// [`PressureMass3`] must be declared on the displacement space (its
 /// geometry at those points). Run with
-/// `disp.mlt_add_element(&disp, &op, λ, u, β, y)`.
+/// `disp.mlt_add_element_dg(&disp, &op, u, y, λ)`.
 pub struct FusedKpQ4Q2<const D: usize> {
     /// `cof(J)·n̂·w_face` summed over the faces through each node, `[elem][node]`.
     bndy: Vec<[f64; D]>,
@@ -56,7 +56,7 @@ impl<const D: usize> FusedKpQ4Q2<D> {
             S::NLOC == Self::NU,
             "FusedKpQ4Q2: the displacement space must be Q4"
         );
-        let n_elem = disp.n_elem();
+        let n_elem = disp.num_elements();
         let w1 = disp.weights_1d(0).to_vec();
         let mut bndy = vec![[0.0; D]; n_elem * Self::NU];
         for e in 0..n_elem {
@@ -129,9 +129,9 @@ impl<const D: usize> FusedKpQ4Q2<D> {
             }
         }
         // To the Q2 pressure: Iᵀ (boundary) + Σ_d G_dᵀ (volume).
-        Q::interpolate_t::<W>(t, &s.pb, &mut s.p, &mut s.tmp);
+        Q::transpose_interpolation::<W>(t, &s.pb, &mut s.p, &mut s.tmp);
         for d in 0..D {
-            Q::gradient_t::<W>(t, d, &s.px[d * nuw..(d + 1) * nuw], &mut s.pt, &mut s.tmp);
+            Q::transpose_gradient_interpolation::<W>(t, d, &s.px[d * nuw..(d + 1) * nuw], &mut s.pt, &mut s.tmp);
             for (p, x) in s.p.iter_mut().zip(&s.pt) {
                 *p += x;
             }
@@ -139,17 +139,17 @@ impl<const D: usize> FusedKpQ4Q2<D> {
         // Inverse pressure mass: `B_P (W⁻¹ (B_Pᵀ p))`, `B_P` the interpolation
         // Gauss–Legendre → Q2 nodes.
         let nm = <QM as Quadrature<D>>::NQ;
-        QM::back_t::<W>(tm, &s.p, &mut s.pm, &mut s.tmp);
+        QM::transpose_back_interpolation::<W>(tm, &s.p, &mut s.pm, &mut s.tmp);
         for m in 0..nm {
             for lane in 0..W {
                 s.pm[m * W + lane] *= self.inv_w[batch.element(lane) * nm + m];
             }
         }
-        QM::back::<W>(tm, &s.pm, &mut s.p, &mut s.tmp);
+        QM::back_interpolation::<W>(tm, &s.pm, &mut s.p, &mut s.tmp);
         // Back to the displacement: `bndy·p − w cof(J) ∇ξ p` at the Q4 nodes.
-        Q::interpolate::<W>(t, &s.p, &mut s.pb, &mut s.tmp);
+        Q::interpolation::<W>(t, &s.p, &mut s.pb, &mut s.tmp);
         for d in 0..D {
-            Q::gradient::<W>(t, d, &s.p, &mut s.px[d * nuw..(d + 1) * nuw], &mut s.tmp);
+            Q::gradient_interpolation::<W>(t, d, &s.p, &mut s.px[d * nuw..(d + 1) * nuw], &mut s.tmp);
         }
         for node in 0..nu {
             for lane in 0..W {

@@ -108,32 +108,32 @@ fn sem_case<const C: usize>(name: &str, n_el: usize, kernel: &impl PointKernel<3
     let mesh = Cube::new([0.0; 3], 1.0, 1.0, 1.0, n_el, n_el, n_el, None, None);
     let space = Space::<3, Iso3<5>>::new(&mesh, Numbering::Continuous);
     let (numbering, n_num) = mesh.get_tensor_numbering([5, 5, 5]);
-    let elements: Vec<usize> = (0..space.n_elem()).map(|e| space.mesh_element(e)).collect();
+    let elements: Vec<usize> = (0..space.num_elements()).map(|e| space.mesh_element(e)).collect();
     let map = DgMap::from_numbering(&numbering, n_num, &elements);
-    let n = space.n_dup() * C;
+    let n = space.num_dg_dofs() * C;
     let density = Constant(1.0);
-    let inv_diag = space.c_inverse_mass(&density).diagonal().unwrap().to_vec();
+    let inv_diag = space.inverse_mass(&density).diagonal().unwrap().to_vec();
     let mut mass = vec![0.0; map.num_dofs()];
     map.collect_dg::<1>(&space.local_mass(&density), &mut mass);
 
     // Inputs: a continuous u, K_loc u (unassembled), a source, u_prev.
     let mut u: Vec<f64> = (0..n).map(|i| ((i as f64) * 1e-3).sin()).collect();
-    space.c_sum_shared::<C>(&mut u);
+    space.sum_shared::<C>(&mut u);
     let mut ku0 = vec![0.0; n];
-    let k_ms = best(|| space.mlt_add::<C>(kernel, 1.0, &u, 0.0, &mut ku0));
+    let k_ms = best(|| space.mlt_dg::<C>(kernel, &u, &mut ku0, 1.0));
     let src: Vec<f64> = (0..n).map(|i| ((i as f64) * 7e-4).cos()).collect();
     let prev0: Vec<f64> = (0..n).map(|i| ((i as f64) * 3e-4).sin()).collect();
 
     // The same shared sum in sem and in DgMap.
     let (mut s1, mut s2) = (ku0.clone(), ku0.clone());
-    space.c_sum_shared::<C>(&mut s1);
+    space.sum_shared::<C>(&mut s1);
     map.sum_shared::<C>(&mut s2);
     assert_eq!(s1, s2, "{name}: DgMap::sum_shared differs from sem's");
 
     let (mut ku, mut prev) = (ku0.clone(), prev0.clone());
     let mut results = Vec::new();
     let ta = best_on(&mut ku, &mut prev, &ku0, &prev0, |ku, prev| {
-        space.c_sum_shared::<C>(ku);
+        space.sum_shared::<C>(ku);
         space.axpby_diag::<C>(2.0, &u, -1.0, prev, -DT * DT, &inv_diag, ku, Some((D, &src)));
     });
     results.push(prev.clone());

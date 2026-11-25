@@ -20,7 +20,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         match kind {
             GeoKind::Affine => {
                 let (x0, j) = &self.affine[e - self.ranges.affine.start];
-                (x0 + j * SVector::<f64, D>::from(self.ref_point(node)), *j)
+                (x0 + j * SVector::<f64, D>::from(self.loc_dof_coordinates(node)), *j)
             }
             GeoKind::Mapped => from_stored(self.mapped_at(&self.nodes, e, node)),
             GeoKind::Q1 | GeoKind::Q2 => match self.nodal_group(&self.nodes, kind) {

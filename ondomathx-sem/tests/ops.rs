@@ -17,7 +17,7 @@ fn dense_lambda_max<const D: usize, S: Shape<D>, const C: usize, K: PointKernel<
     k: &K,
     m_local: &[f64],
 ) -> f64 {
-    dense_lambda_max_of::<D, S, C>(space, |b, y| space.mlt_add::<C>(k, 1.0, b, 0.0, y), m_local)
+    dense_lambda_max_of::<D, S, C>(space, |b, y| space.mlt_dg::<C>(k, b, y, 1.0), m_local)
 }
 
 /// Same, for any element-local operator `local(x, y)` (`y = A_loc x`, with
@@ -28,7 +28,7 @@ fn dense_lambda_max_of<const D: usize, S: Shape<D>, const C: usize>(
     m_local: &[f64],
 ) -> f64 {
     let nloc = S::NLOC;
-    let n = space.n_dup();
+    let n = space.num_dg_dofs();
     // Representatives: the first copy of each global node.
     let mut seen = vec![false; n];
     let mut basis_1 = Vec::new();
@@ -38,7 +38,7 @@ fn dense_lambda_max_of<const D: usize, S: Shape<D>, const C: usize>(
         }
         let mut b = vec![0.0; n];
         b[i] = 1.0;
-        space.c_sum_shared::<1>(&mut b);
+        space.sum_shared::<1>(&mut b);
         for (j, &v) in b.iter().enumerate() {
             if v != 0.0 {
                 seen[j] = true;
@@ -46,13 +46,13 @@ fn dense_lambda_max_of<const D: usize, S: Shape<D>, const C: usize>(
         }
         basis_1.push(b);
     }
-    assert_eq!(basis_1.len(), space.c_n_global());
+    assert_eq!(basis_1.len(), space.num_dofs());
     let basis: Vec<Vec<f64>> = basis_1
         .iter()
         .flat_map(|b| {
             (0..C).map(move |c| {
                 let mut v = vec![0.0; n * C];
-                for e in 0..space.n_elem() {
+                for e in 0..space.num_elements() {
                     for node in 0..nloc {
                         v[e * C * nloc + c * nloc + node] = b[e * nloc + node];
                     }
@@ -93,13 +93,13 @@ fn local_mass_and_mass_inner() {
     let m = space.local_mass(&Constant(1.0));
     let u = space.sample::<1>(|x| [x[0]]);
     assert!((space.mass_inner::<1>(&m, &u, &u) - 8.0 / 3.0).abs() < 1e-12);
-    // Two components add up; inverse_mass is 1/Σ_shared(local_mass).
+    // Two components add up; inverse_mass_dg is 1/Σ_shared(local_mass).
     let u2 = space.sample::<2>(|x| [x[0], 1.0]);
     assert!((space.mass_inner::<2>(&m, &u2, &u2) - (8.0 / 3.0 + 2.0)).abs() < 1e-12);
     let mut ms = m.clone();
-    space.c_sum_shared::<1>(&mut ms);
+    space.sum_shared::<1>(&mut ms);
     let inv = space
-        .c_inverse_mass(&Constant(1.0))
+        .inverse_mass(&Constant(1.0))
         .diagonal()
         .unwrap()
         .to_vec();
@@ -107,10 +107,10 @@ fn local_mass_and_mass_inner() {
         .iter()
         .zip(&ms)
         .all(|(i, s)| (i * s - 1.0).abs() < 1e-14));
-    let mult = space.c_multiplicity();
+    let mult = space.multiplicity_dg();
     assert_eq!(
         mult.iter().map(|k| 1.0 / k).sum::<f64>().round() as usize,
-        space.c_n_global()
+        space.num_dofs()
     );
 }
 
@@ -124,13 +124,13 @@ fn apply_and_scale_by() {
     };
     let u = space.sample::<2>(|x| [x[0] * x[1], x[1].sin()]);
     let mut expected = vec![0.0; u.len()];
-    space.mlt_add::<2>(&k, 1.0, &u, 0.0, &mut expected);
-    space.c_sum_shared::<2>(&mut expected);
+    space.mlt_dg::<2>(&k, &u, &mut expected, 1.0);
+    space.sum_shared::<2>(&mut expected);
     let mut out = vec![f64::NAN; u.len()];
-    space.c_apply::<2>(&k, &u, &mut out);
+    space.mlt_assembled::<2>(&k, &u, &mut out);
     assert_eq!(out, expected);
 
-    let diag: Vec<f64> = (0..space.n_dup()).map(|i| 1.0 + i as f64).collect();
+    let diag: Vec<f64> = (0..space.num_dg_dofs()).map(|i| 1.0 + i as f64).collect();
     let mut v = u.clone();
     space.scale_by::<2>(&diag, &mut v);
     let nloc = Space::<2, Iso2<4>>::NLOC;
@@ -148,7 +148,7 @@ fn apply_and_scale_by() {
 fn axpby_diag_fuses_the_inverse_mass() {
     let mesh = square(3, 2, true, Some(bending_2d()));
     let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
-    let inv_m = space.c_inverse_mass(&Constant(2.0));
+    let inv_m = space.inverse_mass(&Constant(2.0));
     let diag = inv_m.diagonal().unwrap();
     let x = space.sample::<2>(|p| [p[0] * p[1], p[1].sin()]);
     let y = space.sample::<2>(|p| [p[0].cos(), p[0] + p[1]]);
@@ -201,7 +201,7 @@ fn max_eigenvalue_matches_dense() {
     let k = AcousticStiffness { rho };
     let mass = Constant(0.5);
     let exact = dense_lambda_max(&space, &k, &space.local_mass(&mass));
-    let est = space.c_max_eigenvalue::<1>(&k, &mass, 20_000, 1e-14);
+    let est = space.max_eigenvalue::<1>(&k, &mass, 20_000, 1e-14);
     assert!(
         est.lambda <= exact * (1.0 + 1e-12),
         "{} > {exact}",
@@ -224,7 +224,7 @@ fn max_eigenvalue_matches_dense() {
     };
     let mass = Constant(1.5);
     let exact = dense_lambda_max(&space, &k, &space.local_mass(&mass));
-    let est = space.c_max_eigenvalue::<2>(&k, &mass, 20_000, 1e-14);
+    let est = space.max_eigenvalue::<2>(&k, &mass, 20_000, 1e-14);
     assert!(
         (est.lambda - exact).abs() < 1e-8 * exact,
         "{} vs {exact}",
@@ -318,7 +318,7 @@ fn power_iteration_on_a_composite_operator() {
         mu: Constant(1.0),
     };
     let rho = Constant(1.3);
-    let inv_mp = sp.inverse_mass_with::<PresMass>(&Constant(1.0));
+    let inv_mp = sp.inverse_mass_with_dg::<PresMass>(&Constant(1.0));
     let div = Divergence {
         coef: Constant(1.0),
     };
@@ -327,23 +327,23 @@ fn power_iteration_on_a_composite_operator() {
     };
     // Element-local A x = R x + λ Bᵀ (M^P)⁻¹ B x.
     let local = |x: &[f64], y: &mut [f64]| {
-        su.mlt_add::<2>(&r, 1.0, x, 0.0, y);
-        let mut p = vec![0.0; sp.n_dup()];
-        su.mlt_add_mixed::<DispRule, 2, 1, _>(&sp, &div, 1.0, x, 0.0, &mut p);
+        su.mlt_dg::<2>(&r, x, y, 1.0);
+        let mut p = vec![0.0; sp.num_dg_dofs()];
+        su.mlt_mixed_dg::<DispRule, 2, 1, _>(&sp, &div, x, &mut p, 1.0);
         inv_mp.apply::<1>(&mut p);
-        sp.mlt_add_mixed::<DispRule, 1, 2, _>(&su, &div_t, lambda, &p, 1.0, y);
+        sp.mlt_add_mixed_dg::<DispRule, 1, 2, _>(&su, &div_t, &p, y, lambda);
     };
     let m = su.local_mass(&rho);
-    let inv_m = su.c_inverse_mass(&rho);
+    let inv_m = su.inverse_mass(&rho);
     let exact = dense_lambda_max_of::<2, _, 2>(&su, local, &m);
     let est = power_iteration(
         |y| inv_m.apply::<2>(y),
         |x, y| {
             local(x, y);
-            su.c_sum_shared::<2>(y);
+            su.sum_shared::<2>(y);
         },
         |a, b| su.mass_inner::<2>(&m, a, b),
-        su.c_start_vector::<2>(),
+        su.start_vector::<2>(),
         1e-14,
         50_000,
     );
@@ -359,6 +359,6 @@ fn power_iteration_on_a_composite_operator() {
         est.n_iter
     );
     // λ dominates: the spectrum is far above the elastic one.
-    let elastic = su.c_max_eigenvalue::<2>(&r, &rho, 50_000, 1e-12).lambda;
+    let elastic = su.max_eigenvalue::<2>(&r, &rho, 50_000, 1e-12).lambda;
     assert!(exact > 10.0 * elastic, "{exact} vs elastic {elastic}");
 }

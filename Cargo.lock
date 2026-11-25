@@ -424,7 +424,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b177669b642916ff77216b59b8670bd669f40403a663f7d8a7d25ab921448d8"
 dependencies = [
- "nalgebra 0.34.2",
+ "nalgebra",
  "rayon",
 ]
 
@@ -443,22 +443,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "nalgebra"
-version = "0.33.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d43ddcacf343185dfd6de2ee786d9e8b1c2301622afab66b6c73baf9882abfd"
-dependencies = [
- "approx 0.5.1",
- "matrixmultiply",
- "nalgebra-macros 0.2.2",
- "num-complex 0.4.6",
- "num-rational",
- "num-traits",
- "simba",
- "typenum",
-]
 
 [[package]]
 name = "nalgebra"
@@ -486,23 +470,12 @@ dependencies = [
  "glam 0.31.1",
  "glam 0.32.1",
  "matrixmultiply",
- "nalgebra-macros 0.3.0",
+ "nalgebra-macros",
  "num-complex 0.4.6",
  "num-rational",
  "num-traits",
  "simba",
  "typenum",
-]
-
-[[package]]
-name = "nalgebra-macros"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "254a5372af8fc138e36684761d3c0cdb758a4410e938babcff1c860ce14ddbfc"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -518,11 +491,11 @@ dependencies = [
 
 [[package]]
 name = "nalgebra-sparse"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1107e2587bc373090389bd5b54e05ac3184fd02d7c102decf5d76b8feb84b2d0"
+checksum = "df054d7815152d4e66955fc59a1f97f4036e5103134a381b6b54ec55babfa6b7"
 dependencies = [
- "nalgebra 0.33.3",
+ "nalgebra",
  "num-traits",
 ]
 
@@ -621,10 +594,10 @@ dependencies = [
 
 [[package]]
 name = "ondomathx-sem"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "lobatto",
- "nalgebra 0.34.2",
+ "nalgebra",
  "ondomathx-mesh",
  "ondomathx-toolbox",
  "rayon",
@@ -635,7 +608,7 @@ name = "ondomathx-tetrix"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "nalgebra 0.33.3",
+ "nalgebra",
  "nalgebra-sparse",
  "ondomathx-mesh",
  "ondomathx-toolbox",

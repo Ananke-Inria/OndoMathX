@@ -101,7 +101,59 @@ Order of work (each step proposed in detail and approved first):
    thread) to 36 % (14 threads) faster than TetriX's. Memory: 199 MB on the
    acoustic cube (one DG vector 111 MB; sem's shared groups ≈ 110 MB), 59 MB
    on the elastic cube, 10 MB on the Heart (TetriX's own tables ≈ 25 MB).
-3. Both spaces adopt `DgMap` (D2) and the mass model (D4: TetriX's loop
-   to `sum_shared` + `axpby_diag`); the renaming (D1, D3, D5, D7, D8) and
-   nalgebra 0.34 (D9): breaking, `ondomathx-sem` 0.2.0.
-4. The I/O formats.
+3. In three parts, each approved and checked before the next:
+   - **3a, done 2026-11-25**: both spaces own a `DgMap`. TetriX: it replaces
+     `loc2glob` (`Vec<Vec<usize>>`), `glob2dg`, `dg2glob`; `collect_dg`,
+     `collect_avg_dg`, `scatter_cg`, `mlt_inverse_mass`, `loc2glob(e, i)`
+     keep their names; new `sum_shared`, `num_dg_dofs`, `multiplicity`,
+     `dg_map`. Its driver uses the D4 model (`mlt_stiffness_dg`,
+     `sum_shared`, `lal::axpby_diag` with `scatter_cg(1/mass)`): ‖u‖_M
+     unchanged to 7 digits at all 29 outputs, the last snapshot within
+     5.6e-13 of the former one (rounding, over 10 904 steps), time loop
+     13.8 → 12.1 s. sem: the continuous numbering is a `DgMap` (see
+     `ondomathx-sem/CLAUDE.md`); new `collect_dg`, `collect_avg_dg`,
+     `scatter_cg`; the eight examples bit-identical.
+   - **3b, done 2026-11-25**: TetriX on nalgebra 0.34 and nalgebra-sparse
+     0.11 (benches): one nalgebra (0.34.2) in the workspace; the driver's 30
+     VTK files bit-identical to 3a, 51 TetriX tests pass, the
+     `tetrix_p2_space` bench runs again (it read `Heart.mesh` through a
+     stale `CARGO_MANIFEST_DIR` until the build cache was cleared).
+   - **3c, done 2026-11-25**: the renaming, approved as a name-by-name
+     table (in `ondomathx-sem/CLAUDE.md`, "API names since 0.2.0"), with
+     three rules decided then: TetriX's `_dg` suffix in sem for
+     element-local operations on DG vectors (`mlt_dg`, `mlt_add_dg`,
+     `mlt_mixed_dg`, `mlt_element_dg`, …, `inverse_mass_dg`,
+     `inverse_mass_with_dg`, `multiplicity_dg`), plain names for assembled
+     ones (`inverse_mass`, `mlt_assembled`, `boundary_mask`, `start_vector`,
+     `max_eigenvalue`, `multiplicity(i_glob)`); D5's β replaced by the pair
+     overwrite / accumulate (the two β = 0.5 tests scale `v` first). TetriX
+     gained `mlt_add_stiffness_dg` and `sample::<C>` (tested on
+     `Cube.mesh`). sem's eight examples bit-identical, 393 workspace tests
+     pass. `ondomathx-sem` is 0.2.0.
+
+Before publishing: `ondomathx-toolbox` 0.1.0 on crates.io is the empty crate,
+so the toolbox needs a new version and sem's and TetriX's `version = "0.1.0"`
+requirement on it must follow; TetriX is breaking too (its `lal` module was
+removed in step 1). Versions not yet decided.
+4. **Done 2026-11-25**: the file formats in the toolbox, `io_vtk::VtkGrid`
+   (header, points, one cell type, formatted once; `write` / `write_to` of
+   point fields given by `value(point, comp)`: `SCALARS`, `VECTORS` for
+   `dim` components, else one `SCALARS` per component) and
+   `io_vizir::HoSolution` (`HOSolAt<tag>` header once; rows from
+   `value(row, node, comp)`). One text format: shortest exact numbers,
+   `# vtk DataFile Version 3.0`, each crate's name as title, VTK values with
+   `|v| < 1e-40` written as `0` (TetriX's rule, now in both). Adapters: sem's
+   `VtkWriter` / `VizirWriter` unchanged in API; TetriX gained the same
+   writer objects (`io_vtk::VtkWriter`, `io_vizir::VizirWriter`, global
+   vectors `[dof][comp]`), its `write`, `write_vtk`, `write_solution` are
+   wrappers (one scalar `SOLUTION`, as before). Checks: sem's `.sol` files
+   and TetriX's `.sol` files byte-identical; sem's VTK files differ only in
+   the title and the flushed values (54k values in `acoustic_wave_2d_mesh`,
+   113k in `acoustic_wave_cube`), TetriX's in the version and title lines
+   and the points' exact digits (≤ 3.8e-14 relative). 397 workspace tests.
+
+The convergence plan (D1–D11) is complete. Not decided: the published
+versions (below); `Field` coefficients for TetriX; the names of the mass
+builders (TetriX `assemble_mass(&mut mass, α)` global-size, sem
+`local_mass(coef)` per copy, `inverse_mass(coef)`); test meshes in the
+toolbox.

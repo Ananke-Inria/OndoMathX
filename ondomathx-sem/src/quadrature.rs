@@ -105,29 +105,29 @@ pub trait Sweep<const D: usize, S: Shape<D>>: Quadrature<D> {
     /// Builds the tables from `lobatto::tables`.
     fn tables() -> Self::Tables;
     /// Nodes → points: values.
-    fn interpolate<const W: usize>(
+    fn interpolation<const W: usize>(
         t: &Self::Tables,
         input: &[f64],
         output: &mut [f64],
         tmp: &mut [f64],
     );
-    /// Points → nodes: transpose of [`Sweep::interpolate`].
-    fn interpolate_t<const W: usize>(
+    /// Points → nodes: transpose of [`Sweep::interpolation`].
+    fn transpose_interpolation<const W: usize>(
         t: &Self::Tables,
         input: &[f64],
         output: &mut [f64],
         tmp: &mut [f64],
     );
     /// Nodes → points: reference derivative `∂/∂ξ_b`.
-    fn gradient<const W: usize>(
+    fn gradient_interpolation<const W: usize>(
         t: &Self::Tables,
         b: usize,
         input: &[f64],
         output: &mut [f64],
         tmp: &mut [f64],
     );
-    /// Points → nodes: transpose of [`Sweep::gradient`].
-    fn gradient_t<const W: usize>(
+    /// Points → nodes: transpose of [`Sweep::gradient_interpolation`].
+    fn transpose_gradient_interpolation<const W: usize>(
         t: &Self::Tables,
         b: usize,
         input: &[f64],
@@ -135,9 +135,9 @@ pub trait Sweep<const D: usize, S: Shape<D>>: Quadrature<D> {
         tmp: &mut [f64],
     );
     /// Points → nodes: interpolation back.
-    fn back<const W: usize>(t: &Self::Tables, input: &[f64], output: &mut [f64], tmp: &mut [f64]);
-    /// Nodes → points: transpose of [`Sweep::back`].
-    fn back_t<const W: usize>(t: &Self::Tables, input: &[f64], output: &mut [f64], tmp: &mut [f64]);
+    fn back_interpolation<const W: usize>(t: &Self::Tables, input: &[f64], output: &mut [f64], tmp: &mut [f64]);
+    /// Nodes → points: transpose of [`Sweep::back_interpolation`].
+    fn transpose_back_interpolation<const W: usize>(t: &Self::Tables, input: &[f64], output: &mut [f64], tmp: &mut [f64]);
 }
 
 /// 1D matrices of one direction: `N` nodes, `M` points.
@@ -431,7 +431,7 @@ impl<
     fn tables() -> Self::Tables {
         (Tables1::new(F0::GAUSS), Tables1::new(F1::GAUSS))
     }
-    fn interpolate<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
+    fn interpolation<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
         fwd2::<N0, M0, N1, M1, W>(
             &t.0.interp,
             &t.1.interp,
@@ -441,7 +441,7 @@ impl<
             tmp,
         );
     }
-    fn interpolate_t<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
+    fn transpose_interpolation<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
         trans2::<N0, M0, N1, M1, W>(
             &t.0.interp,
             &t.1.interp,
@@ -451,7 +451,7 @@ impl<
             tmp,
         );
     }
-    fn gradient<const W: usize>(
+    fn gradient_interpolation<const W: usize>(
         t: &Self::Tables,
         b: usize,
         i: &[f64],
@@ -467,7 +467,7 @@ impl<
             _ => fwd2::<N0, M0, N1, M1, W>(&t.0.interp, &t.1.deriv, [s0, false], i, o, tmp),
         }
     }
-    fn gradient_t<const W: usize>(
+    fn transpose_gradient_interpolation<const W: usize>(
         t: &Self::Tables,
         b: usize,
         i: &[f64],
@@ -483,7 +483,7 @@ impl<
             _ => trans2::<N0, M0, N1, M1, W>(&t.0.interp, &t.1.deriv, [s0, false], i, o, tmp),
         }
     }
-    fn back<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
+    fn back_interpolation<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
         fwd2::<M0, N0, M1, N1, W>(
             &t.0.back,
             &t.1.back,
@@ -493,7 +493,7 @@ impl<
             tmp,
         );
     }
-    fn back_t<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
+    fn transpose_back_interpolation<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
         trans2::<M0, N0, M1, N1, W>(
             &t.0.back,
             &t.1.back,
@@ -527,15 +527,15 @@ impl<
             Tables1::new(F2::GAUSS),
         )
     }
-    fn interpolate<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
+    fn interpolation<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
         let id = id3::<F0, F1, F2>([N0, N1, N2], [M0, M1, M2]);
         fwd3::<N0, M0, N1, M1, N2, M2, W>(&t.0.interp, &t.1.interp, &t.2.interp, id, i, o, tmp);
     }
-    fn interpolate_t<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
+    fn transpose_interpolation<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
         let id = id3::<F0, F1, F2>([N0, N1, N2], [M0, M1, M2]);
         trans3::<N0, M0, N1, M1, N2, M2, W>(&t.0.interp, &t.1.interp, &t.2.interp, id, i, o, tmp);
     }
-    fn gradient<const W: usize>(
+    fn gradient_interpolation<const W: usize>(
         t: &Self::Tables,
         b: usize,
         i: &[f64],
@@ -576,7 +576,7 @@ impl<
             ),
         }
     }
-    fn gradient_t<const W: usize>(
+    fn transpose_gradient_interpolation<const W: usize>(
         t: &Self::Tables,
         b: usize,
         i: &[f64],
@@ -617,11 +617,11 @@ impl<
             ),
         }
     }
-    fn back<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
+    fn back_interpolation<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
         let id = id3::<F0, F1, F2>([N0, N1, N2], [M0, M1, M2]);
         fwd3::<M0, N0, M1, N1, M2, N2, W>(&t.0.back, &t.1.back, &t.2.back, id, i, o, tmp);
     }
-    fn back_t<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
+    fn transpose_back_interpolation<const W: usize>(t: &Self::Tables, i: &[f64], o: &mut [f64], tmp: &mut [f64]) {
         let id = id3::<F0, F1, F2>([N0, N1, N2], [M0, M1, M2]);
         trans3::<M0, N0, M1, N1, M2, N2, W>(&t.0.back, &t.1.back, &t.2.back, id, i, o, tmp);
     }

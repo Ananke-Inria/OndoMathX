@@ -6,9 +6,9 @@
 //!   `σ = λ tr(ε) I + 2μ ε`. Stiffness [`IsotropicElastic`], mass coefficient `ρ`.
 //!
 //! [`Mass`] applies a weighted mass `∫ c u·v` to any number of components; time
-//! stepping uses [`crate::Space::c_inverse_mass`] instead, which is diagonal.
+//! stepping uses [`crate::Space::inverse_mass`] instead, which is diagonal.
 //!
-//! Mixed kernels (`PointKernel<D, CU, CV>`, for [`Space::mlt_add_mixed`](crate::Space::mlt_add_mixed)): the
+//! Mixed kernels (`PointKernel<D, CU, CV>`, for [`Space::mlt_mixed_dg`](crate::Space::mlt_mixed_dg)): the
 //! divergence pair of the displacement–pressure coupling,
 //! `b(u, q) = ∫ c q div u` ([`Divergence`], `D` → 1 components) and its
 //! transpose `bᵀ(p, v) = ∫ c p div v` ([`DivergenceTranspose`], 1 → `D`).
@@ -19,8 +19,8 @@
 //! `∫ S` (the basis is a partition of unity), so with an over-integration
 //! quadrature `Q`:
 //! ```ignore
-//! let mut s = vec![0.0; space.n_dup()];
-//! space.mlt_add_mixed::<Q, C, 1, _>(&space, &L2Error { exact }, 1.0, &u, 0.0, &mut s);
+//! let mut s = vec![0.0; space.num_dg_dofs()];
+//! space.mlt_mixed_dg::<Q, C, 1, _>(&space, &L2Error { exact }, &u, &mut s, 1.0);
 //! let err_l2 = s.iter().sum::<f64>().sqrt();
 //! ```
 

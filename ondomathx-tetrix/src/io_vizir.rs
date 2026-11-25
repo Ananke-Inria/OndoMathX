@@ -1,61 +1,65 @@
+//! Vizir high-order solutions (`HOSolAtTetrahedraP1`, `.sol` files) on the
+//! P2 sub-space. The format is `ondomathx_toolbox::io_vizir`; [`VizirWriter`]
+//! formats the header once, as `ondomathx-sem`'s writer.
+
+use std::io;
+use std::path::Path;
+
 use ondomathx_mesh::mesh::UnstructuredMesh;
+use ondomathx_toolbox::io_vizir::HoSolution;
 
 use crate::tetrix_p2_space::{TetriXP2Space, ORDER};
-/// Write a Vizir `.sol` file for a scalar or vector solution.
-///
-/// The file follows the `MeshVersionFormatted 2` / `HOSolAt` convention used
-/// by the Vizir visualiser.
-pub fn write_solution(
-    file_name: &str,
-    fe_space: &TetriXP2Space,
-    _mesh: &UnstructuredMesh,
-    solution: &[f64],
-    n: usize,
-) {
+
+/// Writer of Vizir `.sol` files for one [`TetriXP2Space`].
+pub struct VizirWriter {
+    sol: HoSolution,
+    /// Global DoF of each P2 node of each element, `[elem][node]`.
+    glob: Vec<usize>,
+    nloc: usize,
+    n_dof: usize,
+}
+
+impl VizirWriter {
+    /// Formats the header and the P2 node positions (barycentric) of
+    /// `fe_space`, built on `mesh`.
+    pub fn new(fe_space: &TetriXP2Space, _mesh: &UnstructuredMesh) -> Self {
+        let nloc = fe_space.num_loc_p2_dofs();
+        let positions: Vec<Vec<f64>> = (0..nloc)
+            .map(|i| fe_space.get_barycentric_coordinates(fe_space.loc_dof_coordinates(i)).to_vec())
+            .collect();
+        let n_elem = fe_space.num_elements();
+        let glob = (0..n_elem)
+            .flat_map(|e| (0..nloc).map(move |i| (e, i)))
+            .map(|(e, i)| fe_space.p2_glob2glob(fe_space.p2_loc2glob(e, i)))
+            .collect();
+        VizirWriter {
+            sol: HoSolution::new("TetrahedraP1", ORDER, &positions, n_elem),
+            glob,
+            nloc,
+            n_dof: fe_space.num_dofs(),
+        }
+    }
+
+    /// Geometric tag (`TetrahedraP1`).
+    pub fn tag(&self) -> &str {
+        self.sol.tag()
+    }
+
+    /// Writes the `components`-component field `data` (a global vector,
+    /// `[dof][comp]`) to `path`.
+    pub fn write(&self, path: impl AsRef<Path>, data: &[f64], components: usize) -> io::Result<()> {
+        assert_eq!(data.len(), self.n_dof * components, "data length");
+        let (nloc, glob) = (self.nloc, &self.glob);
+        self.sol.write(path, components, |row, node, k| data[components * glob[row * nloc + node] + k])
+    }
+}
+
+/// Write a Vizir `.sol` file for a scalar or vector solution, to
+/// `{file_name}.{n:05}.sol` (a [`VizirWriter`] built for this one file).
+pub fn write_solution(file_name: &str, fe_space: &TetriXP2Space, mesh: &UnstructuredMesh, solution: &[f64], n: usize) {
     let dim_sol = solution.len() / fe_space.num_dofs();
     let file_path = format!("{}.{:05}.sol", file_name, n);
-
-    let file = std::fs::File::create(&file_path)
-        .unwrap_or_else(|e| panic!("Cannot create {}: {}", file_path, e));
-    let mut ofs = std::io::BufWriter::new(file);
-
-    use std::io::Write;
-
-    let dimension: usize = 3;
-    let geo_element_tag = "TetrahedraP1";
-    let n_loc_p2 = fe_space.num_loc_p2_dofs();
-
-    writeln!(ofs, "MeshVersionFormatted 2").unwrap();
-    writeln!(ofs, "Dimension").unwrap();
-    writeln!(ofs, "{}", dimension).unwrap();
-    write!(ofs, "HOSolAt{}NodesPositions", geo_element_tag).unwrap();
-    writeln!(ofs).unwrap();
-    writeln!(ofs, "{}", n_loc_p2).unwrap();
-
-    for i_loc in 0..n_loc_p2 {
-        let uvw = fe_space.loc_dof_coordinates(i_loc);
-        let bc = fe_space.get_barycentric_coordinates(uvw);
-        for coord in &bc {
-            write!(ofs, "{} ", coord).unwrap();
-        }
-        writeln!(ofs).unwrap();
-    }
-
-    writeln!(ofs, "HOSolAt{}", geo_element_tag).unwrap();
-    writeln!(ofs, "{}", fe_space.num_elements()).unwrap();
-    writeln!(ofs, "1 {}", dim_sol).unwrap();
-    writeln!(ofs, "{} {}", ORDER, n_loc_p2).unwrap();
-
-    for i_elt in 0..fe_space.num_elements() {
-        for i_loc in 0..n_loc_p2 {
-            for k in 0..dim_sol {
-                let i_glob_p2 = fe_space.p2_loc2glob(i_elt, i_loc);
-                let i_glob = fe_space.p2_glob2glob(i_glob_p2);
-                write!(ofs, "{} ", solution[dim_sol * i_glob + k]).unwrap();
-            }
-        }
-        writeln!(ofs).unwrap();
-    }
-
-    writeln!(ofs, "End").unwrap();
+    VizirWriter::new(fe_space, mesh)
+        .write(&file_path, solution, dim_sol)
+        .unwrap_or_else(|e| panic!("Cannot write {}: {}", file_path, e));
 }

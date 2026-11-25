@@ -79,13 +79,13 @@ fn check<const D: usize, S: ondomathx_sem::Shape<D>>(
     let (t, pos, n_elem, cc, degree, rows) = parse(&sol);
     assert_eq!(
         (t.as_str(), n_elem, cc, degree),
-        (tag, space.n_elem(), c, S::N[0] - 1)
+        (tag, space.num_elements(), c, S::N[0] - 1)
     );
     for (node, p) in pos.iter().enumerate() {
-        assert_eq!(p.as_slice(), space.ref_point(node).as_slice());
+        assert_eq!(p.as_slice(), space.loc_dof_coordinates(node).as_slice());
     }
     // Row k: the k-th volume element of the mesh (mesh order), node-major.
-    let mut by_mesh: Vec<usize> = (0..space.n_elem()).collect();
+    let mut by_mesh: Vec<usize> = (0..space.num_elements()).collect();
     by_mesh.sort_by_key(|&e| space.mesh_element(e));
     let nloc = S::NLOC;
     for (row, &e) in rows.iter().zip(&by_mesh) {

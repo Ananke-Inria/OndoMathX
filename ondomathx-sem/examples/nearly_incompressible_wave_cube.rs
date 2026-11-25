@@ -64,10 +64,10 @@ fn main() {
         .build();
     println!(
         "{} elements, {} displacement nodes ({} dofs), {} pressure dofs",
-        disp.n_elem(),
-        disp.c_n_global(),
-        3 * disp.c_n_global(),
-        pres.n_dup()
+        disp.num_elements(),
+        disp.num_dofs(),
+        3 * disp.num_dofs(),
+        pres.num_dg_dofs()
     );
 
     // 3. The physics:
@@ -81,12 +81,12 @@ fn main() {
     };
     let kp = FusedKpQ4Q2::<3>::new(&disp, 1.0);
     let density = Constant(1.0);
-    let inv_mass = disp.c_inverse_mass(&density);
+    let inv_mass = disp.inverse_mass(&density);
     // y = (R + λ K^P) u, assembled.
     let apply = |u: &[f64], y: &mut [f64]| {
-        disp.mlt_add::<3>(&shear, 1.0, u, 0.0, y);
-        disp.mlt_add_element(&disp, &kp, lambda, u, 1.0, y);
-        disp.c_sum_shared::<3>(y);
+        disp.mlt_dg::<3>(&shear, u, y, 1.0);
+        disp.mlt_add_element_dg(&disp, &kp, u, y, lambda);
+        disp.sum_shared::<3>(y);
     };
 
     // 4. The time step: 95 % of 2 / √ρ(M⁻¹(R + λ K^P)), the spectral radius by
@@ -96,7 +96,7 @@ fn main() {
         |y| inv_mass.apply::<3>(y),
         |x, y| apply(x, y),
         |a, b| disp.mass_inner::<3>(&m, a, b),
-        disp.c_start_vector::<3>(),
+        disp.start_vector::<3>(),
         1e-3,
         5000,
     );
@@ -110,7 +110,7 @@ fn main() {
 
     // 5. The source f(x) g(t), along x: `source` = M⁻¹F, F = ∫ f·φ_i.
     let mut source = disp.local_load::<3>(|x| [bump(x, [0.5, 0.5, 0.5], 0.1, 1.0), 0.0, 0.0]);
-    disp.c_sum_shared::<3>(&mut source);
+    disp.sum_shared::<3>(&mut source);
     inv_mass.apply::<3>(&mut source);
 
     // 6. The output: the mesh once; every 0.1, the displacement and the
@@ -124,16 +124,16 @@ fn main() {
         .unwrap();
     let (vtk_u, vizir_u) = (VtkWriter::new(&disp), VizirWriter::new(&disp, &mesh));
     let (vtk_p, vizir_p) = (VtkWriter::new(&pres), VizirWriter::new(&pres, &mesh));
-    let inv_mass_p = pres.inverse_mass_with::<PressureMass3>(&Constant(1.0));
+    let inv_mass_p = pres.inverse_mass_with_dg::<PressureMass3>(&Constant(1.0));
     let divergence = Divergence {
         coef: Constant(1.0),
     };
-    let mut p = vec![0.0; pres.n_dup()];
+    let mut p = vec![0.0; pres.num_dg_dofs()];
     let output_every = (0.1 / dt).floor() as usize;
 
     // 7. The leapfrog scheme, u(0) = u'(0) = 0:
     //    uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹(R + λ K^P) uⁿ + dt² g(tⁿ) M⁻¹F.
-    let n = 3 * disp.n_dup();
+    let n = 3 * disp.num_dg_dofs();
     let mut u_prev = vec![0.0; n]; // uⁿ⁻¹
     let mut u_now = vec![0.0; n]; // uⁿ
     let mut au = vec![0.0; n]; // M⁻¹(R + λ K^P) uⁿ
@@ -153,13 +153,12 @@ fn main() {
         std::mem::swap(&mut u_prev, &mut u_now);
 
         if step > 0 && step % output_every == 0 {
-            disp.mlt_add_mixed::<DisplacementNodes, 3, 1, _>(
+            disp.mlt_mixed_dg::<DisplacementNodes, 3, 1, _>(
                 &pres,
                 &divergence,
-                lambda,
                 &u_now,
-                0.0,
                 &mut p,
+                lambda,
             );
             inv_mass_p.apply::<1>(&mut p); // p = λ (M^P)⁻¹ B u
             let u_field = VtkField {

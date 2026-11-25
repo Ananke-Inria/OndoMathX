@@ -38,8 +38,8 @@ fn main() {
     let space = Space::<2, Iso2<7>>::new(&mesh, Numbering::Continuous);
     println!(
         "{} elements, {} degrees of freedom",
-        space.n_elem(),
-        space.c_n_global()
+        space.num_elements(),
+        space.num_dofs()
     );
 
     // 3. The physics: the stiffness ∫ (A ∇u)·∇v and the mass ∫ u v (density 1).
@@ -48,11 +48,11 @@ fn main() {
         a: [[2.0, 0.0], [0.0, 1.0]],
     };
     let density = Constant(1.0);
-    let inv_mass = space.c_inverse_mass(&density);
+    let inv_mass = space.inverse_mass(&density);
 
     // 4. The time step: 95 % of the stability limit 2 / √λ_max(M⁻¹K), with
     //    λ_max estimated by power iteration.
-    let eig = space.c_max_eigenvalue::<1>(&stiffness, &density, 5000, 1e-3);
+    let eig = space.max_eigenvalue::<1>(&stiffness, &density, 5000, 1e-3);
     let dt = 0.95 * 2.0 / eig.lambda.sqrt(); // 95 % of the leapfrog limit 2 / √λ_max
     let t_end = 2.0;
     let steps = (t_end / dt).ceil() as usize;
@@ -64,7 +64,7 @@ fn main() {
     // 5. The source f(x) g(t). The load vector F = ∫ f φ_i is computed once;
     //    `source` = M⁻¹F, so that each step adds dt² g(t) M⁻¹F.
     let mut source = space.local_load::<1>(|x| [bump(x, [0.0, 0.0], 0.2, 4.0)]);
-    space.c_sum_shared::<1>(&mut source); // assemble: sum the copies of shared nodes
+    space.sum_shared::<1>(&mut source); // assemble: sum the copies of shared nodes
     inv_mass.apply::<1>(&mut source);
 
     // 6. The output: the mesh once, snapshots every 0.1.
@@ -80,7 +80,7 @@ fn main() {
     //    uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ + dt² g(tⁿ) M⁻¹F.
     //    Vectors hold the values at the nodes of every element (a node shared
     //    by several elements has one copy per element).
-    let n = space.n_dup();
+    let n = space.num_dg_dofs();
     let mut u_prev = vec![0.0; n]; // uⁿ⁻¹
     let mut u_now = vec![0.0; n]; // uⁿ
     let mut ku = vec![0.0; n]; // M⁻¹K uⁿ
@@ -90,7 +90,7 @@ fn main() {
     let start = Instant::now();
     for step in 0..steps {
         let t = step as f64 * dt;
-        space.c_apply::<1>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
+        space.mlt_assembled::<1>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
         let g = ricker(t, 7.0, 0.2);
         // uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ + dt² g M⁻¹f in one pass, written into
         // u_prev (uⁿ⁻¹ is no longer needed), then swapped.

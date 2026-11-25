@@ -12,10 +12,40 @@ Crate `ondomathx-sem` of the **OndoMathX** workspace (repository
 - `ondomathx-mesh` (`../ondomathx-mesh`, formerly Anamesh): meshes, geometric maps, labels, DOF numbering.
 - `lobatto` (crates.io, `0.1.4`; source in the Lobatto repository, formerly QuadratiX): all 1D
   data (`lobatto::tables`) and the sum-factorized batched kernels.
+- `ondomathx-toolbox` (`../ondomathx-toolbox`): linear algebra (`lal`: dot,
+  norms, power iteration, `axpby_diag`), the DG ↔ global map
+  (`numbering::DgMap`, this crate's continuous numbering) and the source
+  signals.
 
 Until 2026-11-25 this was the separate repository LobattoX; its history was
 imported here. Commit from the workspace root. Older entries below keep the old
 names (LobattoX, Anamesh, QuadratiX, `lobattox::`).
+
+**API names since 0.2.0** (2026-11-25, convergence with `ondomathx-tetrix`,
+workspace CLAUDE.md "API convergence", step 3c). Entries below written
+before that date use the old names:
+
+| Old | New |
+|---|---|
+| `n_elem()`, `c_n_global()`, `n_dup()` | `num_elements()`, `num_dofs()`, `num_dg_dofs()` (+ `num_loc_dofs()`) |
+| `mlt_add(k, α, u, β, v)` | `mlt_dg(k, u, v, α)` (β = 0) / `mlt_add_dg(k, u, v, α)` (β = 1) |
+| `mlt_add_batched`, `mlt_add_mixed`, `mlt_add_element` | `mlt_batched_dg` / `mlt_add_batched_dg`, `mlt_mixed_dg` / `mlt_add_mixed_dg`, `mlt_element_dg` / `mlt_add_element_dg` (same argument order) |
+| `c_apply(k, u, out)` | `mlt_assembled(k, u, out)` |
+| `c_sum_shared` | `sum_shared` (+ `collect_dg`, `collect_avg_dg`, `scatter_cg`) |
+| `c_multiplicity()` (per copy) | `multiplicity_dg()`; new `multiplicity(i_glob)` |
+| `inverse_mass`, `inverse_mass_with` (local) | `inverse_mass_dg`, `inverse_mass_with_dg` |
+| `c_inverse_mass` (assembled) | `inverse_mass` |
+| `c_boundary_mask`, `c_start_vector`, `c_max_eigenvalue` | `boundary_mask`, `start_vector`, `max_eigenvalue` |
+| `label(e)`, `ref_point(node)` | `get_label(e)`, `loc_dof_coordinates(node)` (+ `is_affine(e)`) |
+| `Sweep::interpolate` / `_t`, `gradient` / `_t`, `back` / `_t` | `interpolation` / `transpose_interpolation`, `gradient_interpolation` / `transpose_gradient_interpolation`, `back_interpolation` / `transpose_back_interpolation` |
+
+Rule (TetriX's): `_dg` marks an element-local operation on DG vectors, a
+plain name an assembled one.
+
+Output since step 4: `VtkWriter` and `VizirWriter` keep their API and are
+adapters over `ondomathx_toolbox::io_vtk` / `io_vizir`; the VTK title is
+`ondomathx-sem` (was `lobattox`) and values with `|v| < 1e-40` are written as
+`0`; the `.sol` files are byte-identical to before.
 This file holds the design record: decisions, contracts, lessons from the
 predecessors, and the ordered roadmap.
 
@@ -44,10 +74,16 @@ cargo fmt
   in tensor order on `[0,1]^D` makes `get_numbering` return tensor-ordered local
   indices, because `DoFSet` keeps the order of `pos_list`. No permutation table
   is needed. The numbering is consumed to build the shared groups, then dropped.
-- **Shared-DOF groups (CSR).** For each global DOF shared by ≥ 2 elements, the
-  list of its duplicated indices: `offsets: Vec<usize>`, `indices: Vec<usize>`.
-  Interior DOFs (most of them at high order) do not appear. This is TetriX's
-  `glob2dg` pruned to the interface.
+- **Continuous numbering: an `ondomathx_toolbox::numbering::DgMap`** (since
+  2026-11-25, API convergence step 3a; was the shared-DOF groups alone):
+  `DgMap::from_numbering` on `get_tensor_numbering`, in storage order, `u32`
+  indices. It holds `glob2dg` (CSR), `dg2glob`, and the shared groups (DOFs
+  with ≥ 2 copies, the only ones `c_sum_shared` touches). `c_n_global`,
+  `c_sum_shared`, `c_multiplicity` run on it, bit-identical to the former
+  groups (the eight examples' snapshots unchanged); the transfers
+  `collect_dg`, `collect_avg_dg`, `scatter_cg` (global layout `[dof][comp]`)
+  were added with it. About 199 MB on a 7.2 M-DoF Q4 cube (one DG vector
+  111 MB; the former groups ≈ 110 MB).
 - **Elements are reordered by geometric type.** Storage holds contiguous groups:
   affine, general Q1, general Q2. Each group gets its own monomorphized loop. A
   permutation `mesh_elem[e]` maps storage to mesh order (labels, I/O).
@@ -461,9 +497,9 @@ dedicated implementation. This section revises "Method and storage" and
 - Point kernels are written per point (scalar) and called in a `for lane in 0..W`
   loop over `[comp][lane]` buffers, relying on inlining and vectorization. If
   benchmarks show no vectorization, switch to a lane-array signature.
-- The shared-DOF sum is parallel over groups. The groups partition the shared
-  duplicated indices, so the writes are disjoint. It is implemented with the
-  TetriX `usize`-pointer pattern and a SAFETY comment.
+- The shared-DOF sum is parallel over groups (`DgMap::sum_shared`). The
+  groups partition the shared duplicated indices, so the writes are disjoint
+  (a pointer wrapper and a SAFETY comment in the toolbox).
 
 ## Lessons from the predecessors
 - C++ `AbstractMltAdd`:

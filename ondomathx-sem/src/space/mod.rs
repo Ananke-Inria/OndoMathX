@@ -90,24 +90,16 @@ pub enum Numbering {
     Continuous,
 }
 
-/// Shared-DOF data of the continuous numbering.
-pub(crate) struct Shared {
-    pub(crate) n_global: usize,
-    /// CSR over the global DOFs shared by ≥ 2 copies; entries are `e·NLOC + node`.
-    pub(crate) offsets: Vec<usize>,
-    pub(crate) indices: Vec<usize>,
-}
-
 /// GLL Lagrange space on a quadrangle (`D = 2`) or hexahedron (`D = 3`) mesh,
 /// with the point counts per direction of the shape `S` ([`crate::Gll2`],
 /// [`crate::Gll3`], [`crate::Iso2`], [`crate::Iso3`]).
 ///
 /// Every space is discontinuous: vectors with `C` components have
-/// `n_elem · C · NLOC` entries, element `e` owns `e·C·NLOC .. (e+1)·C·NLOC`, one
+/// `num_elements · C · NLOC` entries, element `e` owns `e·C·NLOC .. (e+1)·C·NLOC`, one
 /// contiguous slice per component, nodes in tensor order
 /// `i + N0·j + N0·N1·k`.
 /// An optional continuous numbering ([`Numbering`]) identifies the copies of a
-/// node shared by several elements; [`Space::c_sum_shared`] then restores
+/// node shared by several elements; [`Space::sum_shared`] then restores
 /// continuity.
 ///
 /// Naming rule: functions prefixed `c_` use the continuous numbering and panic
@@ -139,8 +131,8 @@ pub struct Space<const D: usize, S: Shape<D>> {
     pub(crate) q1_nodes: Vec<[f64; D]>,
     /// Q2 group, `3^D` tensor-ordered nodes per element.
     pub(crate) q2_nodes: Vec<[f64; D]>,
-    /// Continuous numbering, if requested.
-    pub(crate) shared: Option<Shared>,
+    /// Continuous numbering, if requested (DG ↔ global map, shared groups).
+    pub(crate) dg_map: Option<ondomathx_toolbox::numbering::DgMap>,
     /// Hash of the element storage (order and groups): spaces built from the
     /// same mesh share it, mixed products check it.
     pub(crate) fingerprint: u64,
@@ -176,7 +168,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
 
     /// Whether the space was built with a continuous numbering.
     pub fn has_numbering(&self) -> bool {
-        self.shared.is_some()
+        self.dg_map.is_some()
     }
 
     /// Multi-index `(i, j[, k])` of local node `node` (tensor order, `i` fastest).
@@ -199,19 +191,25 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         S::weights_1d(&self.tables, d)
     }
 
-    /// Reference point of local node `node` in `[0, 1]^D`.
-    pub fn ref_point(&self, node: usize) -> [f64; D] {
+    /// Reference coordinates of local node `node` in `[0, 1]^D`.
+    pub fn loc_dof_coordinates(&self, node: usize) -> [f64; D] {
         core::array::from_fn(|d| self.nodes.ref_points[node][d])
     }
 
     /// Number of (volume) elements.
-    pub fn n_elem(&self) -> usize {
+    pub fn num_elements(&self) -> usize {
         self.n_elem
     }
 
-    /// Number of duplicated nodes, `n_elem · NLOC` (entries of a 1-component vector).
-    pub fn n_dup(&self) -> usize {
+    /// Number of duplicated nodes, `num_elements · NLOC` (entries of a
+    /// 1-component DG vector).
+    pub fn num_dg_dofs(&self) -> usize {
         self.n_elem * Self::NLOC
+    }
+
+    /// Nodes per element and component (`NLOC`).
+    pub fn num_loc_dofs(&self) -> usize {
+        Self::NLOC
     }
 
     /// Storage range of the elements of geometric type `kind`.
@@ -227,13 +225,18 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
             .expect("element index out of range")
     }
 
+    /// Whether storage element `e` is affine (`kind(e) == GeoKind::Affine`).
+    pub fn is_affine(&self, e: usize) -> bool {
+        self.ranges.of(GeoKind::Affine).contains(&e)
+    }
+
     /// Mesh index of storage element `e`.
     pub fn mesh_element(&self, e: usize) -> usize {
         self.mesh_elem[e]
     }
 
     /// Mesh label of storage element `e`.
-    pub fn label(&self, e: usize) -> usize {
+    pub fn get_label(&self, e: usize) -> usize {
         self.labels[e]
     }
 
@@ -245,7 +248,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Samples `f` at every duplicated node: a `C`-component vector.
     pub fn sample<const C: usize>(&self, f: impl Fn([f64; D]) -> [f64; C] + Sync) -> Vec<f64> {
         let nloc = Self::NLOC;
-        let mut v = vec![0.0; self.n_dup() * C];
+        let mut v = vec![0.0; self.num_dg_dofs() * C];
         v.par_chunks_mut(C * nloc)
             .enumerate()
             .for_each(|(e, block)| {

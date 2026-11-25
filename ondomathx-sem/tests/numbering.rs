@@ -1,5 +1,5 @@
 //! Spaces with and without the continuous numbering ([`Numbering`]), and the
-//! inverse mass operators [`Space::inverse_mass`] / [`Space::c_inverse_mass`].
+//! inverse mass operators [`Space::inverse_mass_dg`] / [`Space::inverse_mass`].
 
 mod common;
 
@@ -41,8 +41,8 @@ fn numbering_does_not_change_storage_or_local_operators() {
         Space::<3, Iso3<3>>::new(&mesh, Numbering::None),
     );
     assert!(sc.has_numbering() && !sd.has_numbering());
-    assert_eq!((sc.n_elem(), sc.n_dup()), (sd.n_elem(), sd.n_dup()));
-    for e in 0..sc.n_elem() {
+    assert_eq!((sc.num_elements(), sc.num_dg_dofs()), (sd.num_elements(), sd.num_dg_dofs()));
+    for e in 0..sc.num_elements() {
         assert_eq!(sc.mesh_element(e), sd.mesh_element(e));
         assert_eq!(sc.kind(e), sd.kind(e));
     }
@@ -50,53 +50,53 @@ fn numbering_does_not_change_storage_or_local_operators() {
         lambda: Constant(2.0),
         mu: Constant(1.0),
     };
-    let u = seeded(sc.n_dup() * 3, 1);
+    let u = seeded(sc.num_dg_dofs() * 3, 1);
     let (mut vc, mut vd) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    sc.mlt_add::<3>(&k, 1.0, &u, 0.0, &mut vc);
-    sd.mlt_add::<3>(&k, 1.0, &u, 0.0, &mut vd);
+    sc.mlt_dg::<3>(&k, &u, &mut vc, 1.0);
+    sd.mlt_dg::<3>(&k, &u, &mut vd, 1.0);
     assert_eq!(vc, vd);
     assert_eq!(sc.local_mass(&Constant(2.0)), sd.local_mass(&Constant(2.0)));
 }
 
 #[test]
 #[should_panic(expected = "Numbering::Continuous")]
-fn c_sum_shared_panics_without_numbering() {
+fn sum_shared_panics_without_numbering() {
     let s = discontinuous_2d();
-    let mut v = vec![0.0; s.n_dup()];
-    s.c_sum_shared::<1>(&mut v);
+    let mut v = vec![0.0; s.num_dg_dofs()];
+    s.sum_shared::<1>(&mut v);
 }
 
 #[test]
 #[should_panic(expected = "Numbering::Continuous")]
-fn c_n_global_panics_without_numbering() {
-    let _ = discontinuous_2d().c_n_global();
+fn num_dofs_panics_without_numbering() {
+    let _ = discontinuous_2d().num_dofs();
 }
 
 #[test]
 #[should_panic(expected = "Numbering::Continuous")]
-fn c_multiplicity_panics_without_numbering() {
-    let _ = discontinuous_2d().c_multiplicity();
+fn multiplicity_dg_panics_without_numbering() {
+    let _ = discontinuous_2d().multiplicity_dg();
 }
 
 #[test]
 #[should_panic(expected = "Numbering::Continuous")]
-fn c_inverse_mass_panics_without_numbering() {
-    let _ = discontinuous_2d().c_inverse_mass(&Constant(1.0));
+fn inverse_mass_panics_without_numbering() {
+    let _ = discontinuous_2d().inverse_mass(&Constant(1.0));
 }
 
 #[test]
 #[should_panic(expected = "Numbering::Continuous")]
-fn c_max_eigenvalue_panics_without_numbering() {
+fn max_eigenvalue_panics_without_numbering() {
     let s = discontinuous_2d();
     let k = IsotropicElastic {
         lambda: Constant(2.0),
         mu: Constant(1.0),
     };
-    let _ = s.c_max_eigenvalue::<2>(&k, &Constant(1.0), 10, 1e-6);
+    let _ = s.max_eigenvalue::<2>(&k, &Constant(1.0), 10, 1e-6);
 }
 
-/// `inverse_mass` is the element-local mass inverse on any space, bit for bit
-/// `1 / local_mass`; `c_inverse_mass` is `1 / Σ_shared local_mass`.
+/// `inverse_mass_dg` is the element-local mass inverse on any space, bit for bit
+/// `1 / local_mass`; `inverse_mass` is `1 / Σ_shared local_mass`.
 #[test]
 fn inverse_mass_is_local_and_c_inverse_mass_is_assembled() {
     let mesh = square(3, 2, true, Some(bending_2d()));
@@ -104,16 +104,16 @@ fn inverse_mass_is_local_and_c_inverse_mass_is_assembled() {
     for numbering in [Numbering::None, Numbering::Continuous] {
         let s = Space::<2, Iso2<4>>::new(&mesh, numbering);
         let m = s.local_mass(&rho);
-        let inv = s.inverse_mass(&rho);
+        let inv = s.inverse_mass_dg(&rho);
         let expected: Vec<f64> = m.iter().map(|x| 1.0 / x).collect();
         assert_eq!(inv.diagonal().unwrap(), expected.as_slice());
     }
     let s = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
     let mut m = s.local_mass(&rho);
-    s.c_sum_shared::<1>(&mut m);
+    s.sum_shared::<1>(&mut m);
     let expected: Vec<f64> = m.iter().map(|x| 1.0 / x).collect();
     assert_eq!(
-        s.c_inverse_mass(&rho).diagonal().unwrap(),
+        s.inverse_mass(&rho).diagonal().unwrap(),
         expected.as_slice()
     );
 }
@@ -129,18 +129,18 @@ fn inverse_mass_inverts_the_mass_operator() {
     };
 
     let sd = Space::<3, Iso3<4>>::new(&mesh, Numbering::None);
-    let u = seeded(sd.n_dup() * 2, 2);
+    let u = seeded(sd.num_dg_dofs() * 2, 2);
     let mut v = vec![0.0; u.len()];
-    sd.mlt_add::<2>(&mass, 1.0, &u, 0.0, &mut v);
-    sd.inverse_mass(&coef).apply::<2>(&mut v);
+    sd.mlt_dg::<2>(&mass, &u, &mut v, 1.0);
+    sd.inverse_mass_dg(&coef).apply::<2>(&mut v);
     assert!(max_rel_diff(&v, &u) < 1e-14, "discontinuous");
 
     let sc = Space::<3, Iso3<4>>::new(&mesh, Numbering::Continuous);
-    let mut u = seeded(sc.n_dup() * 2, 3);
-    sc.c_sum_shared::<2>(&mut u); // continuous
+    let mut u = seeded(sc.num_dg_dofs() * 2, 3);
+    sc.sum_shared::<2>(&mut u); // continuous
     let mut v = vec![0.0; u.len()];
-    sc.c_apply::<2>(&mass, &u, &mut v);
-    sc.c_inverse_mass(&coef).apply::<2>(&mut v);
+    sc.mlt_assembled::<2>(&mass, &u, &mut v);
+    sc.inverse_mass(&coef).apply::<2>(&mut v);
     assert!(max_rel_diff(&v, &u) < 1e-14, "continuous");
 }
 
@@ -151,8 +151,8 @@ fn inverse_mass_apply_matches_scale_by() {
         &square(2, 3, false, Some(bilinear_2d())),
         Numbering::Continuous,
     );
-    let im = s.c_inverse_mass(&Constant(0.7));
-    let u = seeded(s.n_dup() * 3, 4);
+    let im = s.inverse_mass(&Constant(0.7));
+    let u = seeded(s.num_dg_dofs() * 3, 4);
     let (mut a, mut b) = (u.clone(), u);
     im.apply::<3>(&mut a);
     s.scale_by::<3>(im.diagonal().unwrap(), &mut b);

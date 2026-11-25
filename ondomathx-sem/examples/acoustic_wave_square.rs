@@ -36,8 +36,8 @@ fn main() {
     let space = Space::<2, Iso2<5>>::new(&mesh, Numbering::Continuous);
     println!(
         "{} elements, {} degrees of freedom",
-        space.n_elem(),
-        space.c_n_global()
+        space.num_elements(),
+        space.num_dofs()
     );
 
     // 3. The physics: the stiffness ∫ ∇u·∇v (A = identity) and the mass ∫ u v
@@ -46,11 +46,11 @@ fn main() {
         a: [[1.0, 0.0], [0.0, 1.0]],
     };
     let density = Constant(1.0);
-    let inv_mass = space.c_inverse_mass(&density);
+    let inv_mass = space.inverse_mass(&density);
 
     // 4. The time step: 95 % of the stability limit 2 / √λ_max(M⁻¹K), with
     //    λ_max estimated by power iteration.
-    let eig = space.c_max_eigenvalue::<1>(&stiffness, &density, 5000, 1e-3);
+    let eig = space.max_eigenvalue::<1>(&stiffness, &density, 5000, 1e-3);
     let dt = 0.95 * 2.0 / eig.lambda.sqrt(); // 95 % of the leapfrog limit 2 / √λ_max
     let t_end = 1.0;
     let steps = (t_end / dt).ceil() as usize;
@@ -61,14 +61,14 @@ fn main() {
 
     // 5. The initial state: u⁰ = 0 and, by a Taylor expansion,
     //    u¹ = dt v0 − dt³/6 M⁻¹K v0 (as the C++).
-    let n = space.n_dup();
+    let n = space.num_dg_dofs();
     let v0 = space.sample::<1>(|x| {
         [gaussian(x[0] - 0.9, 0.002)
             * gaussian(x[1] - 0.5, 0.002)
             * (2.0 * PI * 20.0 * (x[0] + x[1])).cos()]
     });
     let mut ku = vec![0.0; n]; // M⁻¹K u
-    space.c_apply::<1>(&stiffness, &v0, &mut ku);
+    space.mlt_assembled::<1>(&stiffness, &v0, &mut ku);
     inv_mass.apply::<1>(&mut ku);
     let mut u_prev = vec![0.0; n]; // uⁿ⁻¹
     let mut u_now: Vec<f64> = (0..n)
@@ -92,7 +92,7 @@ fn main() {
     let mut n_out = 0;
     let start = Instant::now();
     for step in 0..steps {
-        space.c_apply::<1>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
+        space.mlt_assembled::<1>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
 
         // uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ in one pass, written into u_prev (uⁿ⁻¹
         // is no longer needed), then swapped.

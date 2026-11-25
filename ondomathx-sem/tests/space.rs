@@ -10,8 +10,8 @@ use ondomathx_sem::{GeoKind, Gll2, Gll3, Iso2, Iso3, Numbering, Shape, Space};
 
 /// Number of copies of each duplicated node.
 fn multiplicity<const D: usize, S: Shape<D>>(space: &Space<D, S>) -> Vec<f64> {
-    let mut ones = vec![1.0; space.n_dup()];
-    space.c_sum_shared::<1>(&mut ones);
+    let mut ones = vec![1.0; space.num_dg_dofs()];
+    space.sum_shared::<1>(&mut ones);
     ones
 }
 
@@ -20,10 +20,10 @@ fn distinct_nodes(mult: &[f64]) -> f64 {
     mult.iter().map(|m| 1.0 / m).sum()
 }
 
-/// Σ_global mass = Σ_dup mass / mult, with mass = 1 / inverse_mass.
+/// Σ_global mass = Σ_dup mass / mult, with mass = 1 / inverse_mass_dg.
 fn total_mass<const D: usize, S: Shape<D>>(space: &Space<D, S>) -> f64 {
     let inv = space
-        .c_inverse_mass(&Constant(1.0))
+        .inverse_mass(&Constant(1.0))
         .diagonal()
         .unwrap()
         .to_vec();
@@ -38,7 +38,7 @@ fn check_continuity<const D: usize, S: Shape<D>>(
 ) {
     let v = space.sample::<2>(f);
     let mut avg = v.clone();
-    space.c_sum_shared::<2>(&mut avg);
+    space.sum_shared::<2>(&mut avg);
     let mult = multiplicity(space);
     let nloc = S::NLOC;
     for (i, (a, b)) in avg.iter().zip(&v).enumerate() {
@@ -53,10 +53,10 @@ fn check_continuity<const D: usize, S: Shape<D>>(
 
 /// The Jacobian at every GLL node matches the mesh's own `get_element_grad_def`.
 fn check_jacobian<const D: usize, S: Shape<D>>(space: &Space<D, S>, mesh: &UnstructuredMesh) {
-    for e in 0..space.n_elem() {
+    for e in 0..space.num_elements() {
         for node in 0..S::NLOC {
             let mut uvw = [0.0; 3];
-            uvw[..D].copy_from_slice(&space.ref_point(node));
+            uvw[..D].copy_from_slice(&space.loc_dof_coordinates(node));
             let mut g = vec![0.0; D * D];
             mesh.get_element_grad_def(space.mesh_element(e), &uvw, &mut g);
             let j = space.map_and_jacobian(e, node).1;
@@ -101,13 +101,13 @@ fn check_square<const NP: usize>() {
     for q2 in [false, true] {
         let mesh = square(3, 2, q2, None);
         let space = Space::<2, Iso2<NP>>::new(&mesh, Numbering::Continuous);
-        assert_eq!(space.n_elem(), 6);
+        assert_eq!(space.num_elements(), 6);
         assert_eq!(
-            space.c_n_global(),
+            space.num_dofs(),
             (3 * p + 1) * (2 * p + 1),
             "NP={NP} q2={q2}"
         );
-        assert!((distinct_nodes(&multiplicity(&space)) - space.c_n_global() as f64).abs() < 1e-9);
+        assert!((distinct_nodes(&multiplicity(&space)) - space.num_dofs() as f64).abs() < 1e-9);
         assert_eq!(
             kind_counts(&space),
             [6, 0, 0, 0],
@@ -169,12 +169,12 @@ fn q2_with_straight_edges_is_demoted_to_q1() {
 fn storage_permutation_and_labels() {
     let mesh = square(3, 2, false, Some(bending_2d()));
     let space = Space::<2, Iso2<3>>::new(&mesh, Numbering::Continuous);
-    let mut seen: Vec<usize> = (0..space.n_elem()).map(|e| space.mesh_element(e)).collect();
+    let mut seen: Vec<usize> = (0..space.num_elements()).map(|e| space.mesh_element(e)).collect();
     seen.sort();
     assert_eq!(seen, mesh.get_elements_by_dimension(2));
-    for e in 0..space.n_elem() {
+    for e in 0..space.num_elements() {
         assert_eq!(
-            space.label(e),
+            space.get_label(e),
             mesh.get_elements()[space.mesh_element(e)].label
         );
     }
@@ -212,13 +212,13 @@ fn check_cube<const NP: usize>() {
     for q2 in [false, true] {
         let mesh = cube([2, 3, 2], q2, None);
         let space = Space::<3, Iso3<NP>>::new(&mesh, Numbering::Continuous);
-        assert_eq!(space.n_elem(), 12);
+        assert_eq!(space.num_elements(), 12);
         assert_eq!(
-            space.c_n_global(),
+            space.num_dofs(),
             (2 * p + 1) * (3 * p + 1) * (2 * p + 1),
             "NP={NP} q2={q2}"
         );
-        assert!((distinct_nodes(&multiplicity(&space)) - space.c_n_global() as f64).abs() < 1e-9);
+        assert!((distinct_nodes(&multiplicity(&space)) - space.num_dofs() as f64).abs() < 1e-9);
         assert_eq!(
             kind_counts(&space),
             [12, 0, 0, 0],
@@ -286,7 +286,7 @@ fn check_anisotropic<const D: usize, S: Shape<D>>(
 ) {
     let n = &S::N[..D];
     let space = Space::<D, S>::new(straight, Numbering::None);
-    assert_eq!(space.n_dup(), space.n_elem() * n.iter().product::<usize>());
+    assert_eq!(space.num_dg_dofs(), space.num_elements() * n.iter().product::<usize>());
     let m: f64 = space.local_mass(&Constant(1.0)).iter().sum();
     assert!((m - measure).abs() < 1e-12, "N={n:?}: measure {m}");
     for (d, &nd) in n.iter().enumerate() {
@@ -295,7 +295,7 @@ fn check_anisotropic<const D: usize, S: Shape<D>>(
     }
     for node in 0..S::NLOC {
         let id = Space::<D, S>::multi_index(node);
-        let x = space.ref_point(node);
+        let x = space.loc_dof_coordinates(node);
         for d in 0..D {
             assert_eq!(x[d], space.points_1d(d)[id[d]]);
         }
@@ -331,11 +331,37 @@ fn anisotropic_continuous_on_unstructured_panics() {
 fn anisotropic_continuous_on_square_and_cube() {
     let sq = Square::new([0.0, 0.0], 2.0, 1.0, 4, 3, Some(bending_2d()), None);
     let space = Space::<2, Gll2<3, 5>>::new(&sq, Numbering::Continuous);
-    assert_eq!(space.c_n_global(), (4 * 2 + 1) * (3 * 4 + 1));
+    assert_eq!(space.num_dofs(), (4 * 2 + 1) * (3 * 4 + 1));
     check_continuity(&space, |x| [x[0].sin() + x[1], x[0] * x[1]]);
-    assert!((distinct_nodes(&multiplicity(&space)) - space.c_n_global() as f64).abs() < 1e-9);
+    assert!((distinct_nodes(&multiplicity(&space)) - space.num_dofs() as f64).abs() < 1e-9);
     let cube = ondomathx_mesh::mesh::cube::Cube::new([0.0; 3], 1.0, 2.0, 1.0, 2, 3, 2, None, None);
     let space = Space::<3, Gll3<2, 4, 3>>::new(&cube, Numbering::Continuous);
-    assert_eq!(space.c_n_global(), (2 + 1) * (3 * 3 + 1) * (2 * 2 + 1));
+    assert_eq!(space.num_dofs(), (2 + 1) * (3 * 3 + 1) * (2 * 2 + 1));
     check_continuity(&space, |x| [x[0] * x[2] + x[1], x[0] - x[1] * x[2]]);
+}
+
+/// The DG ↔ global transfers on a curved mesh, two components: a shared
+/// sum is `collect_dg` then `scatter_cg` (bit for bit), and averaging a
+/// continuous field then scattering it gives the field back.
+#[test]
+fn transfers_between_dg_and_global() {
+    let mesh = square(3, 2, true, Some(bending_2d()));
+    let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
+    let n_glob = space.num_dofs();
+    let k: Vec<f64> = (0..2 * space.num_dg_dofs()).map(|i| ((i as f64) * 0.37).sin()).collect();
+
+    let mut summed = k.clone();
+    space.sum_shared::<2>(&mut summed);
+    let mut cg = vec![0.0; 2 * n_glob];
+    space.collect_dg::<2>(&k, &mut cg);
+    let mut back = vec![f64::NAN; k.len()];
+    space.scatter_cg::<2>(&cg, &mut back);
+    assert_eq!(summed, back);
+
+    let u = space.sample::<2>(|x| [x[0] * x[1], x[1].cos()]);
+    space.collect_avg_dg::<2>(&u, &mut cg);
+    space.scatter_cg::<2>(&cg, &mut back);
+    for (a, b) in u.iter().zip(&back) {
+        assert!((a - b).abs() <= 1e-15 * a.abs().max(1.0), "{a} vs {b}");
+    }
 }

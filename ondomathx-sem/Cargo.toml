@@ -1,6 +1,6 @@
 [package]
 name = "ondomathx-sem"
-version = "0.1.0"
+version = "0.2.0"
 description = "Matrix-free spectral elements on quadrangle and hexahedron meshes."
 edition.workspace = true
 license.workspace = true

@@ -65,7 +65,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     }
 
     /// `w_q · |det J|` at every point of the quadrature `Q` (declared, or the
-    /// node rule), `[elem][q]` (`n_elem · NQ` entries): `∫ f = Σ w f(x_q)`.
+    /// node rule), `[elem][q]` (`num_elements · NQ` entries): `∫ f = Σ w f(x_q)`.
     pub fn quadrature_weights<Q: Sweep<D, S>>(&self) -> Vec<f64> {
         let (q, _) = self.rule::<Q>();
         let mut out = vec![0.0; self.n_elem * Q::NQ];
@@ -98,10 +98,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
 
     /// Values of the `C`-component vector `u` at the points of the quadrature
     /// `Q` (Lagrange interpolation from the GLL nodes, by sum factorization),
-    /// `[elem][comp][q]` (`n_elem · C · NQ` entries).
+    /// `[elem][comp][q]` (`num_elements · C · NQ` entries).
     pub fn quadrature_values<Q: Sweep<D, S>, const C: usize>(&self, u: &[f64]) -> Vec<f64> {
         let nloc = Self::NLOC;
-        assert_eq!(u.len(), self.n_dup() * C, "vector length");
+        assert_eq!(u.len(), self.num_dg_dofs() * C, "vector length");
         let (_, t) = self.rule::<Q>();
         let mut out = vec![0.0; self.n_elem * C * Q::NQ];
         out.par_chunks_mut(C * Q::NQ).enumerate().for_each_init(
@@ -109,7 +109,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
             |tmp, (e, block)| {
                 for c in 0..C {
                     let input = &u[(e * C + c) * nloc..(e * C + c + 1) * nloc];
-                    Q::interpolate::<1>(t, input, &mut block[c * Q::NQ..(c + 1) * Q::NQ], tmp);
+                    Q::interpolation::<1>(t, input, &mut block[c * Q::NQ..(c + 1) * Q::NQ], tmp);
                 }
             },
         );

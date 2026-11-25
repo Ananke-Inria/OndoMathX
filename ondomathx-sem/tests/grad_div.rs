@@ -43,7 +43,7 @@ fn apply<const D: usize, S: Shape<D>, Op: ElementOperator<D, S, S, D, D>>(
     u: &[f64],
 ) -> Vec<f64> {
     let mut v = vec![0.0; u.len()];
-    s.mlt_add_element(s, op, 1.0, u, 0.0, &mut v);
+    s.mlt_element_dg(s, op, u, &mut v, 1.0);
     v
 }
 
@@ -62,7 +62,7 @@ fn options_2d(mesh: &impl Mesh, c: f64) -> f64 {
         .build();
     let k3 = FusedKpQ4Q2::<2>::new(&disp, c);
     let k2 = FusedKp::<2, Iso2<5>, Iso2<3>, QB, QM>::new(&disp, &pres, c);
-    let (u, w) = (seeded(disp.n_dup() * 2, 1), seeded(disp.n_dup() * 2, 2));
+    let (u, w) = (seeded(disp.num_dg_dofs() * 2, 1), seeded(disp.num_dg_dofs() * 2, 2));
     let (k3u, k3w) = (apply(&disp, &k3, &u), apply(&disp, &k3, &w));
     let (a, b) = (dot(&k3u, &w), dot(&u, &k3w));
     assert!(
@@ -86,7 +86,7 @@ fn options_3d(mesh: &impl Mesh) -> f64 {
         .build();
     let k3 = FusedKpQ4Q2::<3>::new(&disp, 1.0);
     let k2 = FusedKp::<3, Iso3<5>, Iso3<3>, QB, QM>::new(&disp, &pres, 1.0);
-    let u = seeded(disp.n_dup() * 3, 3);
+    let u = seeded(disp.num_dg_dofs() * 3, 3);
     max_rel(&apply(&disp, &k3, &u), &apply(&disp, &k2, &u))
 }
 

@@ -7,7 +7,7 @@ Matrix-free spectral elements on quadrangle and hexahedron meshes (formerly Loba
 - **Time stepping blocks** — lumped and tensor inverse masses, power iteration for the stable time step, homogeneous Dirichlet masks, volume sources.
 - **Output** — VTK (tessellated elements) and Vizir high-order solutions.
 
-The 1D Gauss–Lobatto data and sum-factorised kernels come from [`lobatto`](https://crates.io/crates/lobatto).
+The 1D Gauss–Lobatto data and sum-factorised kernels come from [`lobatto`](https://crates.io/crates/lobatto); the DG ↔ global map, the linear algebra (power iteration, fused updates) and the source signals from [`ondomathx-toolbox`](https://crates.io/crates/ondomathx-toolbox), shared with [`ondomathx-tetrix`](https://crates.io/crates/ondomathx-tetrix).
 
 ## Examples
 

@@ -6,7 +6,6 @@ use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
 use ondomathx_toolbox::lal;
 use ondomathx_toolbox::signals::{gaussian, ricker, ricker_delay};
 
-use rayon::prelude::*;
 
 use std::fs;
 use std::time::Instant;
@@ -134,7 +133,13 @@ fn main() {
 
     let mut u_prev = vec![0.0_f64; n_dg]; // u_{n-1}, initialised to zero
     let mut u_curr = vec![0.0_f64; n_dg]; // u_n,     initialised to zero
-    let mut ku_dg = vec![0.0_f64; n_dg]; // M⁻¹ K u_n  (DG)
+    let mut ku_dg = vec![0.0_f64; n_dg]; // K u_n, assembled (DG)
+
+    // M⁻¹ as one value per DG copy (the inverse mass of its global DoF),
+    // fused into the update below.
+    let inv_mass_cg: Vec<f64> = mass.iter().map(|m| 1.0 / m).collect();
+    let mut inv_mass_dg = vec![0.0_f64; n_dg];
+    fe_space.scatter_cg(&inv_mass_cg, &mut inv_mass_dg);
 
     let mut n_out = 0_usize;
     let tloop = Instant::now();
@@ -146,17 +151,24 @@ fn main() {
         // 1. K u_curr  (element-local, parallel, result in DG)
         fe_space.mlt_stiffness_dg(&u_curr, &mut ku_dg, 1.0);
 
-        // 2. M⁻¹: collect DG→CG, divide by diagonal mass, scatter CG→DG
-        fe_space.mlt_inverse_mass(&mut ku_dg, &mass);
+        // 2. Assembly: every copy receives the sum of its DoF's copies
+        fe_space.sum_shared(&mut ku_dg);
 
-        // 3. u_next = 2 u_n − u_{n-1} − dt² M⁻¹K u_n + dt² R(t^n) src
-        //    Written into u_prev (no longer needed as u_{n-1}).
+        // 3. u_next = 2 u_n − u_{n-1} − dt² M⁻¹K u_n + dt² R(t^n) src in one
+        //    pass (M⁻¹ fused), written into u_prev (no longer needed as u_{n-1}).
         let rk = ricker(t, 0.20, ricker_delay(0.20));
         let dt2_rk = dt2 * rk;
-
-        u_prev.par_iter_mut().enumerate().for_each(|(k, prev)| {
-            *prev = 2.0 * u_curr[k] - *prev - dt2 * ku_dg[k] + dt2_rk * source_dg[k];
-        });
+        lal::axpby_diag::<1>(
+            n_loc,
+            2.0,
+            &u_curr,
+            -1.0,
+            &mut u_prev,
+            -dt2,
+            &inv_mass_dg,
+            &ku_dg,
+            Some((dt2_rk, &source_dg)),
+        );
 
         // 4. Swap: u_curr = u_{n+1},  u_prev = u_n
         std::mem::swap(&mut u_prev, &mut u_curr);

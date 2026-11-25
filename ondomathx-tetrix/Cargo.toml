@@ -58,12 +58,12 @@ harness = false
 [dependencies]
 ondomathx-mesh = { path = "../ondomathx-mesh", version = "0.1.0" }
 ondomathx-toolbox = { path = "../ondomathx-toolbox", version = "0.1.0" }
-nalgebra = "0.33"
+nalgebra = "0.34"
 rayon = "1"
 sprs = "0.11"
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
-nalgebra = "0.33"
-nalgebra-sparse = "0.10"
+nalgebra = "0.34"
+nalgebra-sparse = "0.11"
 sprs = "0.11"

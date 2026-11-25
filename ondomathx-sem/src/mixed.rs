@@ -3,18 +3,18 @@
 //! quadrature `Q` of either space (declared, or its node rule `S::Nodes`):
 //! $$ a(u, v) = \sum_q w_q |\det J_q| \big( G(u)(x_q) : \nabla v(x_q) + S(u)(x_q) \cdot v(x_q) \big). $$
 //!
-//! It is an [`ElementOperator`] ([`Pointwise`]) run by [`Space::mlt_add_element`],
+//! It is an [`ElementOperator`] ([`Pointwise`]) run by [`Space::mlt_element_dg`],
 //! which gathers `u` and scatters the result; per batch of `W` elements:
 //! 1. (gather, by the driver),
 //! 2. values and reference gradients of `u` at the points of `Q`
-//!    ([`Sweep::interpolate`], [`Sweep::gradient`] on the trial shape),
+//!    ([`Sweep::interpolation`], [`Sweep::gradient_interpolation`] on the trial shape),
 //! 3. at each point and lane: geometry at the point (stored or recomputed,
 //!    from `Q`'s entry), push-forward, kernel, pull-back,
-//! 4. test against `v`: [`Sweep::interpolate_t`] of the source and
-//!    [`Sweep::gradient_t`] of the pulled-back flux on the test shape,
+//! 4. test against `v`: [`Sweep::transpose_interpolation`] of the source and
+//!    [`Sweep::transpose_gradient_interpolation`] of the pulled-back flux on the test shape,
 //! 5. scatter `β·v + α·y`.
 //!
-//! The same-space product [`Space::mlt_add`] is this one on the node rule
+//! The same-space product [`Space::mlt_dg`] is this one on the node rule
 //! `S::Nodes`. The point loop is monomorphized per geometric kind; the 1D
 //! sweep tables are borrowed from the spaces (node rule, declared
 //! quadratures) and only built for the call when a space does not store them.
@@ -31,7 +31,7 @@ use crate::quadrature::{Quadrature, Sweep};
 use crate::shape::Shape;
 use crate::space::{GeoKind, Space};
 
-/// The generic element operator of [`Space::mlt_add_mixed`]: the pointwise `kernel`
+/// The generic element operator of [`Space::mlt_mixed_dg`]: the pointwise `kernel`
 /// at the points of the quadrature `Q`, node ↔ point sweeps on both shapes.
 pub struct Pointwise<'a, const D: usize, K, Q, SU, SV>
 where
@@ -249,7 +249,7 @@ where
         for c in 0..CU {
             let uc = &u[c * nuw..(c + 1) * nuw];
             if K::USES_VALUE {
-                <Q as Sweep<D, SU>>::interpolate::<W>(
+                <Q as Sweep<D, SU>>::interpolation::<W>(
                     &self.tu,
                     uc,
                     &mut uq[c * nqw..(c + 1) * nqw],
@@ -259,7 +259,7 @@ where
             if K::USES_GRAD {
                 for d in 0..D {
                     let out = &mut gq[(c * D + d) * nqw..(c * D + d + 1) * nqw];
-                    <Q as Sweep<D, SU>>::gradient::<W>(&self.tu, d, uc, out, tmp);
+                    <Q as Sweep<D, SU>>::gradient_interpolation::<W>(&self.tu, d, uc, out, tmp);
                 }
             }
         }
@@ -372,7 +372,7 @@ where
         for c in 0..CV {
             let yc = &mut y[c * nvw..(c + 1) * nvw];
             if K::OUTPUTS_SOURCE {
-                <Q as Sweep<D, SV>>::interpolate_t::<W>(
+                <Q as Sweep<D, SV>>::transpose_interpolation::<W>(
                     &self.tv,
                     &sq[c * nqw..(c + 1) * nqw],
                     yc,
@@ -384,7 +384,7 @@ where
             if K::OUTPUTS_FLUX {
                 for d in 0..D {
                     let h = &gq[(c * D + d) * nqw..(c * D + d + 1) * nqw];
-                    <Q as Sweep<D, SV>>::gradient_t::<W>(&self.tv, d, h, yt, tmp);
+                    <Q as Sweep<D, SV>>::transpose_gradient_interpolation::<W>(&self.tv, d, h, yt, tmp);
                     if d == 0 && !K::OUTPUTS_SOURCE {
                         // First term without a source: `0 + t`, not `t`, so
                         // that a `−0` sums to `+0` as with a zeroed `y`.
@@ -407,19 +407,47 @@ impl<const D: usize, SU: Shape<D>> Space<D, SU> {
     /// (trial, `CU` components) to `v_space` (test shape `SV`, `CV`
     /// components), integrated with the quadrature `Q` of either space
     /// (declared, or its node rule `S::Nodes`); batches of 4 elements
-    /// ([`Pointwise`] run by [`Space::mlt_add_element`]).
+    /// ([`Pointwise`] run by [`Space::mlt_element_dg`]).
     ///
     /// ```ignore
     /// // b(u, q) = ∫ q div u: displacement → pressure, Gauss–Lobatto rule of the displacement
     /// let div = Divergence { coef: Constant(1.0) };
-    /// disp.mlt_add_mixed::<Quad2<Gll<5>, Gll<5>>, 2, 1, _>(&pres, &div, 1.0, &u, 0.0, &mut p);
+    /// disp.mlt_mixed_dg::<Quad2<Gll<5>, Gll<5>>, 2, 1, _>(&pres, &div, &u, &mut p, 1.0);
     /// ```
     ///
     /// The `_` is the test shape (Rust infers no generic argument once one
-    /// is written). With `β = 0`, `v` is overwritten. Panics if the spaces
+    /// is written). `v` is overwritten (never read); [`Space::mlt_add_mixed_dg`]
+    /// accumulates. Panics if the spaces
     /// come from different meshes, if `Q` is a quadrature of neither space,
     /// or on wrong vector lengths.
-    pub fn mlt_add_mixed<Q, const CU: usize, const CV: usize, SV: Shape<D>>(
+    pub fn mlt_mixed_dg<Q, const CU: usize, const CV: usize, SV: Shape<D>>(
+        &self,
+        v_space: &Space<D, SV>,
+        kernel: &impl PointKernel<D, CU, CV>,
+        u: &[f64],
+        v: &mut [f64],
+        alpha: f64,
+    ) where
+        Q: Sweep<D, SU> + Sweep<D, SV>,
+    {
+        self.mixed::<Q, CU, CV, SV>(v_space, kernel, alpha, u, 0.0, v);
+    }
+
+    /// `v ← v + α·A·u` (as [`Space::mlt_mixed_dg`], accumulating).
+    pub fn mlt_add_mixed_dg<Q, const CU: usize, const CV: usize, SV: Shape<D>>(
+        &self,
+        v_space: &Space<D, SV>,
+        kernel: &impl PointKernel<D, CU, CV>,
+        u: &[f64],
+        v: &mut [f64],
+        alpha: f64,
+    ) where
+        Q: Sweep<D, SU> + Sweep<D, SV>,
+    {
+        self.mixed::<Q, CU, CV, SV>(v_space, kernel, alpha, u, 1.0, v);
+    }
+
+    fn mixed<Q, const CU: usize, const CV: usize, SV: Shape<D>>(
         &self,
         v_space: &Space<D, SV>,
         kernel: &impl PointKernel<D, CU, CV>,

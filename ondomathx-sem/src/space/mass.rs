@@ -20,7 +20,7 @@ type TensorApply = Box<dyn Fn(&[f64], &mut [f64], &mut [f64]) + Send + Sync>;
 enum InverseMassKind {
     /// One value per duplicated node.
     Diagonal(Vec<f64>),
-    /// `B W⁻¹ Bᵀ` per element ([`Space::inverse_mass_with`]).
+    /// `B W⁻¹ Bᵀ` per element ([`Space::inverse_mass_with_dg`]).
     Tensor {
         inv_w: Vec<f64>,
         nq: usize,
@@ -29,9 +29,9 @@ enum InverseMassKind {
     },
 }
 
-/// Inverse mass operator of a [`Space`], built by [`Space::inverse_mass`]
-/// (discontinuous GLL lumped mass), [`Space::c_inverse_mass`] (continuous
-/// lumped mass) or [`Space::inverse_mass_with`] (discontinuous mass of a
+/// Inverse mass operator of a [`Space`], built by [`Space::inverse_mass_dg`]
+/// (discontinuous GLL lumped mass), [`Space::inverse_mass`] (continuous
+/// lumped mass) or [`Space::inverse_mass_with_dg`] (discontinuous mass of a
 /// quadrature, tensor form), applied with [`InverseMass::apply`].
 pub struct InverseMass<const D: usize, S: Shape<D>> {
     kind: InverseMassKind,
@@ -51,7 +51,7 @@ impl<const D: usize, S: Shape<D>> InverseMass<D, S> {
         }
     }
 
-    /// `v ← M⁻¹ v` for a `C`-component vector (`n_elem · C · NLOC` entries).
+    /// `v ← M⁻¹ v` for a `C`-component vector (`num_elements · C · NLOC` entries).
     pub fn apply<const C: usize>(&self, v: &mut [f64]) {
         let nloc = S::NLOC;
         match &self.kind {
@@ -79,7 +79,7 @@ impl<const D: usize, S: Shape<D>> InverseMass<D, S> {
     }
 
     /// The diagonal of `M⁻¹`, one value per duplicated node, when `M⁻¹` is
-    /// diagonal (`None` for [`Space::inverse_mass_with`]).
+    /// diagonal (`None` for [`Space::inverse_mass_with_dg`]).
     pub fn diagonal(&self) -> Option<&[f64]> {
         match &self.kind {
             InverseMassKind::Diagonal(d) => Some(d),
@@ -97,7 +97,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// and of the continuous space when `a`, `b` are continuous; no assembly.
     pub fn local_mass(&self, coef: &impl Field<D>) -> Vec<f64> {
         let nloc = Self::NLOC;
-        let mut m = vec![0.0; self.n_dup()];
+        let mut m = vec![0.0; self.num_dg_dofs()];
         m.par_chunks_mut(nloc).enumerate().for_each(|(e, block)| {
             let mut p = PointIn::<D, 1>::zeros();
             p.label = self.labels[e];
@@ -133,7 +133,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     ) -> Vec<f64> {
         let nloc = Self::NLOC;
         let (q, t) = self.rule::<Q>();
-        let mut v = vec![0.0; self.n_dup() * C];
+        let mut v = vec![0.0; self.num_dg_dofs() * C];
         v.par_chunks_mut(C * nloc).enumerate().for_each_init(
             || (vec![0.0; C * Q::NQ], vec![0.0; Q::TMP]),
             |(fq, tmp), (e, block)| {
@@ -147,7 +147,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
                     }
                 }
                 for c in 0..C {
-                    Q::interpolate_t::<1>(
+                    Q::transpose_interpolation::<1>(
                         t,
                         &fq[c * Q::NQ..(c + 1) * Q::NQ],
                         &mut block[c * nloc..(c + 1) * nloc],
@@ -161,10 +161,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
 
     /// Inverse of the element-local lumped mass `c · w · |det J|`: the mass of
     /// the discontinuous space (block diagonal, here diagonal). Never uses the
-    /// numbering; see [`Space::c_inverse_mass`] for the continuous mass.
+    /// numbering; see [`Space::inverse_mass`] for the continuous mass.
     ///
     /// Panics if a mass coefficient is not positive.
-    pub fn inverse_mass(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
+    pub fn inverse_mass_dg(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
         InverseMass::from_mass(self.local_mass(coef))
     }
 
@@ -174,9 +174,9 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     ///
     /// Panics if a mass coefficient is not positive, or without the continuous
     /// numbering.
-    pub fn c_inverse_mass(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
+    pub fn inverse_mass(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
         let mut m = self.local_mass(coef);
-        self.c_sum_shared::<1>(&mut m);
+        self.sum_shared::<1>(&mut m);
         InverseMass::from_mass(m)
     }
 
@@ -191,10 +191,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     ///
     /// Panics if `Q` is neither declared nor the node rule, if its counts
     /// differ from the space's, or on a non-positive `c·w·|det J|`.
-    pub fn inverse_mass_with<Q: Sweep<D, S>>(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
+    pub fn inverse_mass_with_dg<Q: Sweep<D, S>>(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
         assert!(
             (0..D).all(|d| Q::M[d] == S::N[d]),
-            "inverse_mass_with: {} must have the space's counts {:?} per direction",
+            "inverse_mass_with_dg: {} must have the space's counts {:?} per direction",
             type_name::<Q>(),
             &S::N[..D]
         );
@@ -217,11 +217,11 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         let t = Q::tables();
         let apply: TensorApply = Box::new(move |iw: &[f64], v: &mut [f64], tmp: &mut [f64]| {
             let (a, rest) = tmp.split_at_mut(iw.len());
-            Q::back_t::<1>(&t, v, a, rest);
+            Q::transpose_back_interpolation::<1>(&t, v, a, rest);
             for (x, w) in a.iter_mut().zip(iw) {
                 *x *= w;
             }
-            Q::back::<1>(&t, a, v, rest);
+            Q::back_interpolation::<1>(&t, a, v, rest);
         });
         InverseMass {
             kind: InverseMassKind::Tensor {

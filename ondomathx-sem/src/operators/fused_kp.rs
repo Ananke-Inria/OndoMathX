@@ -20,13 +20,13 @@ use crate::space::Space;
 /// - `(M^P)⁻¹`: the inverse of the pressure mass `∫ c p q` with the
 ///   quadrature `QM` (Gauss–Legendre with the pressure counts, `Gl<k−1>`),
 ///   declared on the pressure space, in tensor form `B_P W⁻¹ B_Pᵀ`
-///   (as `Space::inverse_mass_with`);
+///   (as `Space::inverse_mass_with_dg`);
 /// - `Bᵀ`: `bᵀ(p, v) = ∫ p div v`, same quadrature `QB`.
 ///
 /// Trial and test spaces are the displacement space (`D` components):
-/// `disp.mlt_add_element(&disp, &kp, λ, &u, 1.0, &mut y)`
-/// adds `λ K^P u` to `y`. Same result as `mlt_add_mixed` with `Divergence`,
-/// `InverseMass::apply` of `inverse_mass_with`, `mlt_add_mixed` with
+/// `disp.mlt_add_element_dg(&disp, &kp, &u, &mut y, λ)`
+/// adds `λ K^P u` to `y`. Same result as `mlt_mixed_dg` with `Divergence`,
+/// `InverseMass::apply` of `inverse_mass_with_dg`, `mlt_mixed_dg` with
 /// `DivergenceTranspose` (to rounding).
 pub struct FusedKp<'a, const D: usize, SU, SP, QB, QM>
 where
@@ -154,7 +154,7 @@ where
         for c in 0..D {
             for d in 0..D {
                 let out = &mut s.g[(c * D + d) * nbw..(c * D + d + 1) * nbw];
-                <QB as Sweep<D, SU>>::gradient::<W>(
+                <QB as Sweep<D, SU>>::gradient_interpolation::<W>(
                     &self.tbu,
                     d,
                     &u[c * nuw..(c + 1) * nuw],
@@ -179,20 +179,20 @@ where
                 s.sq[i] = w * det_j.signum() * div;
             }
         }
-        <QB as Sweep<D, SP>>::interpolate_t::<W>(&self.tbp, &s.sq, &mut s.p, &mut s.tmp);
+        <QB as Sweep<D, SP>>::transpose_interpolation::<W>(&self.tbp, &s.sq, &mut s.p, &mut s.tmp);
 
         // (M^P)⁻¹ p = B_P W⁻¹ B_Pᵀ p, per element.
-        <QM as Sweep<D, SP>>::back_t::<W>(&self.tm, &s.p, &mut s.pm, &mut s.tmp);
+        <QM as Sweep<D, SP>>::transpose_back_interpolation::<W>(&self.tm, &s.p, &mut s.pm, &mut s.tmp);
         for m in 0..nm {
             for lane in 0..W {
                 s.pm[m * W + lane] *= self.inv_w[batch.element(lane) * nm + m];
             }
         }
-        <QM as Sweep<D, SP>>::back::<W>(&self.tm, &s.pm, &mut s.p, &mut s.tmp);
+        <QM as Sweep<D, SP>>::back_interpolation::<W>(&self.tm, &s.pm, &mut s.p, &mut s.tmp);
 
         // Bᵀ p: p at the QB points, pulled-back flux p I → w sign(det) p cof,
         // tested with the transposed gradients of the displacement shape.
-        <QB as Sweep<D, SP>>::interpolate::<W>(&self.tbp, &s.p, &mut s.sq, &mut s.tmp);
+        <QB as Sweep<D, SP>>::interpolation::<W>(&self.tbp, &s.p, &mut s.sq, &mut s.tmp);
         for q in 0..nb {
             let w = self.b_points.weight(q);
             for lane in 0..W {
@@ -210,7 +210,7 @@ where
             vc.fill(0.0);
             for d in 0..D {
                 let h = &s.g[(c * D + d) * nbw..(c * D + d + 1) * nbw];
-                <QB as Sweep<D, SU>>::gradient_t::<W>(&self.tbu, d, h, &mut s.yt, &mut s.tmp);
+                <QB as Sweep<D, SU>>::transpose_gradient_interpolation::<W>(&self.tbu, d, h, &mut s.yt, &mut s.tmp);
                 for (y, t) in vc.iter_mut().zip(&s.yt) {
                     *y += t;
                 }

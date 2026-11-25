@@ -29,8 +29,8 @@ fn lumped_load_is_nodal() {
     // f = 1: the local mass.
     let one = space.local_load::<1>(|_| [1.0]);
     assert!(max_rel(&one, &space.local_mass(&Constant(1.0))) < 1e-15);
-    space.c_sum_shared::<2>(&mut load);
-    space.c_inverse_mass(&Constant(2.0)).apply::<2>(&mut load);
+    space.sum_shared::<2>(&mut load);
+    space.inverse_mass(&Constant(2.0)).apply::<2>(&mut load);
     let nodal: Vec<f64> = space.sample::<2>(f).iter().map(|v| v / 2.0).collect();
     assert!(max_rel(&load, &nodal) < 1e-14);
 }
@@ -71,10 +71,10 @@ fn forced_leapfrog() {
     let mesh = square(8, 4, false, None); // [0, 2] × [0, 1]
     let space = Space::<2, Iso2<7>>::new(&mesh, Numbering::Continuous);
     let k = AcousticStiffness { rho: Constant(1.0) };
-    let im = space.c_inverse_mass(&Constant(1.0));
+    let im = space.inverse_mass(&Constant(1.0));
     let shape = |x: [f64; 2]| [(PI * x[0]).cos() * (PI * x[1]).cos()];
     let mut mf = space.local_load::<1>(shape); // M⁻¹F of the spatial profile
-    space.c_sum_shared::<1>(&mut mf);
+    space.sum_shared::<1>(&mut mf);
     im.apply::<1>(&mut mf);
     let s = space.sample::<1>(shape);
     let (t_end, steps) = (0.5, 2000);
@@ -86,7 +86,7 @@ fn forced_leapfrog() {
     for n in 1..steps {
         let t = n as f64 * dt;
         let g = 2.0 + 2.0 * PI * PI * t * t;
-        space.c_apply::<1>(&k, &cur, &mut y);
+        space.mlt_assembled::<1>(&k, &cur, &mut y);
         im.apply::<1>(&mut y);
         for i in 0..s.len() {
             let next = 2.0 * cur[i] - prev[i] - dt * dt * (y[i] - g * mf[i]);

@@ -1,5 +1,5 @@
-//! Mixed products (`mlt_add_mixed`), the divergence pair, and the inverse
-//! mass of a quadrature (`Space::inverse_mass_with`).
+//! Mixed products (`mlt_mixed_dg`), the divergence pair, and the inverse
+//! mass of a quadrature (`Space::inverse_mass_with_dg`).
 
 mod common;
 
@@ -125,8 +125,8 @@ fn reference<
         (val, grad)
     };
     let (nu, nv) = (SU::NLOC, SV::NLOC);
-    let mut y = vec![0.0; space.n_elem() * CV * nv];
-    for e in 0..space.n_elem() {
+    let mut y = vec![0.0; space.num_elements() * CV * nv];
+    for e in 0..space.num_elements() {
         let m = space.mesh_element(e);
         for q in 0..Q::NQ {
             let qq = idx(q, &Q::M);
@@ -146,7 +146,7 @@ fn reference<
                 value: SVector::zeros(),
                 grad: SMatrix::zeros(),
                 xyz: SVector::from_fn(|a, _| x[a]),
-                label: space.label(e),
+                label: space.get_label(e),
                 dof: e * Q::NQ + q,
             };
             let mut gu = SMatrix::<f64, CU, D>::zeros();
@@ -188,9 +188,9 @@ where
         .quadrature::<Q>(GeoStorage::Recompute)
         .build();
     let sv = Space::<D, SV>::new(mesh, Numbering::None);
-    let u = seeded(su.n_dup() * 2, 5);
-    let mut v = vec![f64::NAN; sv.n_dup()];
-    su.mlt_add_mixed::<Q, 2, 1, SV>(&sv, &Everything, 1.0, &u, 0.0, &mut v);
+    let u = seeded(su.num_dg_dofs() * 2, 5);
+    let mut v = vec![f64::NAN; sv.num_dg_dofs()];
+    su.mlt_mixed_dg::<Q, 2, 1, SV>(&sv, &Everything, &u, &mut v, 1.0);
     let r = reference::<D, SU, SV, Q, 2, 1>(mesh, &su, &Everything, &u);
     let err = max_rel(&v, &r);
     assert!(err < 1e-12, "{what}: max rel diff {err:e}");
@@ -218,7 +218,7 @@ fn mixed_matches_reference_3d() {
     }
 }
 
-/// U = V and Q = the nodes: the mixed product is `mlt_add`.
+/// U = V and Q = the nodes: the mixed product is `mlt_dg`.
 #[test]
 fn same_space_on_its_nodes_is_mlt_add() {
     type Nodes = Quad2<Gll<5>, Gll<5>>;
@@ -228,19 +228,19 @@ fn same_space_on_its_nodes_is_mlt_add() {
         .quadrature::<Nodes>(GeoStorage::Store)
         .build();
     let ka = AcousticStiffness { rho: Constant(2.0) };
-    let u = seeded(s.n_dup(), 1);
+    let u = seeded(s.num_dg_dofs(), 1);
     let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    s.mlt_add::<1>(&ka, 1.0, &u, 0.0, &mut a);
-    s.mlt_add_mixed::<Nodes, 1, 1, _>(&s, &ka, 1.0, &u, 0.0, &mut b);
+    s.mlt_dg::<1>(&ka, &u, &mut a, 1.0);
+    s.mlt_mixed_dg::<Nodes, 1, 1, _>(&s, &ka, &u, &mut b, 1.0);
     assert!(max_rel(&b, &a) < 1e-13);
     let ke = IsotropicElastic {
         lambda: Constant(2.0),
         mu: Constant(0.7),
     };
-    let u = seeded(s.n_dup() * 2, 2);
+    let u = seeded(s.num_dg_dofs() * 2, 2);
     let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    s.mlt_add::<2>(&ke, 1.0, &u, 0.0, &mut a);
-    s.mlt_add_mixed::<Nodes, 2, 2, _>(&s, &ke, 1.0, &u, 0.0, &mut b);
+    s.mlt_dg::<2>(&ke, &u, &mut a, 1.0);
+    s.mlt_mixed_dg::<Nodes, 2, 2, _>(&s, &ke, &u, &mut b, 1.0);
     assert!(max_rel(&b, &a) < 1e-13);
 }
 
@@ -261,18 +261,17 @@ fn disp_pres(mesh: &impl Mesh) -> (Space<2, Iso2<5>>, Space<2, Iso2<3>>) {
 fn divergence_pair_is_adjoint() {
     let mesh = square(3, 2, true, Some(bending_2d()));
     let (su, sp) = disp_pres(&mesh);
-    let u = seeded(su.n_dup() * 2, 3);
-    let p = seeded(sp.n_dup(), 4);
+    let u = seeded(su.num_dg_dofs() * 2, 3);
+    let p = seeded(sp.num_dg_dofs(), 4);
     let (mut bu, mut btp) = (vec![0.0; p.len()], vec![0.0; u.len()]);
     let c = Constant(1.7);
-    su.mlt_add_mixed::<DispRule, 2, 1, _>(&sp, &Divergence { coef: c }, 1.0, &u, 0.0, &mut bu);
-    sp.mlt_add_mixed::<DispRule, 1, 2, _>(
+    su.mlt_mixed_dg::<DispRule, 2, 1, _>(&sp, &Divergence { coef: c }, &u, &mut bu, 1.0);
+    sp.mlt_mixed_dg::<DispRule, 1, 2, _>(
         &su,
         &DivergenceTranspose { coef: c },
-        1.0,
         &p,
-        0.0,
         &mut btp,
+        1.0,
     );
     let (a, b) = (dot(&bu, &p), dot(&u, &btp));
     assert!((a - b).abs() < 1e-12 * a.abs().max(1.0), "{a} vs {b}");
@@ -287,29 +286,27 @@ fn divergence_is_exact_on_polynomials() {
     let u = su.sample::<2>(|x| [x[0] * x[0], x[0] * x[1]]);
     let p = sp.sample::<1>(|x| [1.0 + x[1]]);
     let mut bu = vec![0.0; p.len()];
-    su.mlt_add_mixed::<DispRule, 2, 1, _>(
+    su.mlt_mixed_dg::<DispRule, 2, 1, _>(
         &sp,
         &Divergence {
             coef: Constant(1.0),
         },
-        1.0,
         &u,
-        0.0,
         &mut bu,
+        1.0,
     );
     let i = dot(&bu, &p);
     assert!((i - 9.0).abs() < 1e-12, "∫ p div u = {i}");
     // Divergence-free field: rotation.
     let u = su.sample::<2>(|x| [-x[1], x[0]]);
-    su.mlt_add_mixed::<DispRule, 2, 1, _>(
+    su.mlt_mixed_dg::<DispRule, 2, 1, _>(
         &sp,
         &Divergence {
             coef: Constant(1.0),
         },
-        1.0,
         &u,
-        0.0,
         &mut bu,
+        1.0,
     );
     assert!(bu.iter().all(|v| v.abs() < 1e-13), "div of a rotation");
 }
@@ -322,10 +319,10 @@ fn inverse_mass_with_inverts_the_quadrature_mass() {
     let check = |mesh: &dyn Fn() -> Space<2, Iso2<3>>, what: &str| {
         let s = mesh();
         let c = Constant(2.5);
-        let p = seeded(s.n_dup() * 2, 6);
+        let p = seeded(s.num_dg_dofs() * 2, 6);
         let mut mp = vec![0.0; p.len()];
-        s.mlt_add_mixed::<G3, 2, 2, _>(&s, &Mass { coef: c }, 1.0, &p, 0.0, &mut mp);
-        let im = s.inverse_mass_with::<G3>(&c);
+        s.mlt_mixed_dg::<G3, 2, 2, _>(&s, &Mass { coef: c }, &p, &mut mp, 1.0);
+        let im = s.inverse_mass_with_dg::<G3>(&c);
         assert!(im.diagonal().is_none());
         im.apply::<2>(&mut mp);
         let err = max_rel(&mp, &p);
@@ -360,19 +357,18 @@ fn inverse_mass_with_3d() {
     let s = Space::<3, Iso3<3>>::builder(&mesh)
         .quadrature::<G>(GeoStorage::Store)
         .build();
-    let p = seeded(s.n_dup(), 7);
+    let p = seeded(s.num_dg_dofs(), 7);
     let mut mp = vec![0.0; p.len()];
-    s.mlt_add_mixed::<G, 1, 1, _>(
+    s.mlt_mixed_dg::<G, 1, 1, _>(
         &s,
         &Mass {
             coef: Constant(1.0),
         },
-        1.0,
         &p,
-        0.0,
         &mut mp,
+        1.0,
     );
-    s.inverse_mass_with::<G>(&Constant(1.0)).apply::<1>(&mut mp);
+    s.inverse_mass_with_dg::<G>(&Constant(1.0)).apply::<1>(&mut mp);
     assert!(max_rel(&mp, &p) < 1e-12);
 }
 
@@ -385,10 +381,10 @@ fn inverse_mass_with_gll_rule_is_diagonal() {
         .quadrature::<Nodes>(GeoStorage::Store)
         .build();
     let c = Constant(0.8);
-    let v = seeded(s.n_dup() * 3, 8);
+    let v = seeded(s.num_dg_dofs() * 3, 8);
     let (mut a, mut b) = (v.clone(), v);
-    s.inverse_mass_with::<Nodes>(&c).apply::<3>(&mut a);
-    s.inverse_mass(&c).apply::<3>(&mut b);
+    s.inverse_mass_with_dg::<Nodes>(&c).apply::<3>(&mut a);
+    s.inverse_mass_dg(&c).apply::<3>(&mut b);
     assert!(max_rel(&a, &b) < 1e-14);
 }
 
@@ -399,17 +395,16 @@ fn different_meshes_panic() {
         .quadrature::<DispRule>(GeoStorage::Store)
         .build();
     let b = Space::<2, Iso2<3>>::new(&square(3, 2, false, None), Numbering::None);
-    let u = vec![0.0; a.n_dup()];
-    let mut v = vec![0.0; b.n_dup()];
-    a.mlt_add_mixed::<DispRule, 1, 1, _>(
+    let u = vec![0.0; a.num_dg_dofs()];
+    let mut v = vec![0.0; b.num_dg_dofs()];
+    a.mlt_mixed_dg::<DispRule, 1, 1, _>(
         &b,
         &Mass {
             coef: Constant(1.0),
         },
-        1.0,
         &u,
-        0.0,
         &mut v,
+        1.0,
     );
 }
 
@@ -418,17 +413,16 @@ fn different_meshes_panic() {
 fn undeclared_mixed_quadrature_panics() {
     let mesh = square(2, 2, false, None);
     let a = Space::<2, Iso2<3>>::new(&mesh, Numbering::None);
-    let u = vec![0.0; a.n_dup()];
+    let u = vec![0.0; a.num_dg_dofs()];
     let mut v = u.clone();
-    a.mlt_add_mixed::<DispRule, 1, 1, _>(
+    a.mlt_mixed_dg::<DispRule, 1, 1, _>(
         &a,
         &Mass {
             coef: Constant(1.0),
         },
-        1.0,
         &u,
-        0.0,
         &mut v,
+        1.0,
     );
 }
 
@@ -439,5 +433,5 @@ fn inverse_mass_with_wrong_counts_panics() {
     let s = Space::<2, Iso2<3>>::builder(&square(2, 2, false, None))
         .quadrature::<G>(GeoStorage::Store)
         .build();
-    let _ = s.inverse_mass_with::<G>(&Constant(1.0));
+    let _ = s.inverse_mass_with_dg::<G>(&Constant(1.0));
 }

@@ -86,7 +86,7 @@ fn stored_geometry_equals_recomputed() {
         let (r, s) = (build(GeoStorage::Recompute), build(GeoStorage::Store));
         assert_eq!(r.quadrature_weights::<Q>(), s.quadrature_weights::<Q>());
         assert_eq!(r.quadrature_xyz::<Q>(), s.quadrature_xyz::<Q>());
-        let u = seeded(r.n_dup() * 3, 1);
+        let u = seeded(r.num_dg_dofs() * 3, 1);
         assert_eq!(
             r.quadrature_values::<Q, 3>(&u),
             s.quadrature_values::<Q, 3>(&u)
@@ -96,8 +96,8 @@ fn stored_geometry_equals_recomputed() {
             mu: Constant(1.0),
         };
         let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-        r.mlt_add::<3>(&k, 1.0, &u, 0.0, &mut a);
-        s.mlt_add::<3>(&k, 1.0, &u, 0.0, &mut b);
+        r.mlt_dg::<3>(&k, &u, &mut a, 1.0);
+        s.mlt_dg::<3>(&k, &u, &mut b, 1.0);
         assert_eq!(a, b, "q2={q2}");
         assert_eq!(r.local_mass(&Constant(1.0)), s.local_mass(&Constant(1.0)));
     }
@@ -112,7 +112,7 @@ fn node_quadrature_is_the_identity() {
     let space = Space::<2, Iso2<5>>::builder(&mesh)
         .quadrature::<Nodes>(GeoStorage::Recompute)
         .build();
-    let u = seeded(space.n_dup() * 2, 2);
+    let u = seeded(space.num_dg_dofs() * 2, 2);
     assert_eq!(space.quadrature_values::<Nodes, 2>(&u), u);
     assert_eq!(
         space.quadrature_weights::<Nodes>(),
@@ -127,8 +127,8 @@ fn node_quadrature_is_the_identity() {
 }
 
 /// The node rule `S::Nodes` is available without being declared, with the
-/// node geometry: the same results as when declared, `mlt_add_mixed` on it is
-/// `mlt_add`, and `local_load` is `local_load_with` on it (all bitwise).
+/// node geometry: the same results as when declared, `mlt_mixed_dg` on it is
+/// `mlt_dg`, and `local_load` is `local_load_with` on it (all bitwise).
 #[test]
 fn node_rule_is_implicit() {
     type Nodes = <Iso2<5> as ondomathx_sem::Shape<2>>::Nodes;
@@ -137,7 +137,7 @@ fn node_rule_is_implicit() {
     let declared = Space::<2, Iso2<5>>::builder(&mesh)
         .quadrature::<Nodes>(GeoStorage::Store)
         .build();
-    let u = seeded(implicit.n_dup() * 2, 3);
+    let u = seeded(implicit.num_dg_dofs() * 2, 3);
     assert_eq!(implicit.quadrature_values::<Nodes, 2>(&u), u);
     assert_eq!(
         implicit.quadrature_weights::<Nodes>(),
@@ -157,8 +157,8 @@ fn node_rule_is_implicit() {
         mu: Constant(1.0),
     };
     let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    implicit.mlt_add::<2>(&k, 1.0, &u, 0.0, &mut a);
-    implicit.mlt_add_mixed::<Nodes, 2, 2, _>(&implicit, &k, 1.0, &u, 0.0, &mut b);
+    implicit.mlt_dg::<2>(&k, &u, &mut a, 1.0);
+    implicit.mlt_mixed_dg::<Nodes, 2, 2, _>(&implicit, &k, &u, &mut b, 1.0);
     assert_eq!(a, b);
 }
 
@@ -229,7 +229,7 @@ fn circle_exact_geometry() {
     // Boundary of the exact geometry: all nodes within the disk, the outer ones on it.
     let x = space.sample::<2>(|x| x);
     let n = Space::<2, Iso2<4>>::NLOC;
-    let r_max = (0..space.n_dup())
+    let r_max = (0..space.num_dg_dofs())
         .map(|i| {
             let (e, k) = (i / n, i % n);
             ((x[e * 2 * n + k] - center[0]).powi(2) + (x[e * 2 * n + n + k] - center[1]).powi(2))
@@ -240,8 +240,8 @@ fn circle_exact_geometry() {
     // Continuity of a sampled field across the shared nodes.
     let mut v = space.sample::<1>(|x| [x[0].sin() * x[1]]);
     let before = v.clone();
-    space.c_sum_shared::<1>(&mut v);
-    let m = space.c_multiplicity();
+    space.sum_shared::<1>(&mut v);
+    let m = space.multiplicity_dg();
     for ((a, b), k) in v.iter().zip(&before).zip(&m) {
         assert!((a / k - b).abs() < 1e-12);
     }
@@ -318,8 +318,8 @@ fn engine_on_mapped_elements() {
     };
     let u = sm.sample::<2>(|x| [x[0].sin() * x[1], x[0] * x[0] - x[1]]);
     let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    sm.mlt_add::<2>(&k, 1.0, &u, 0.0, &mut a);
-    sa.mlt_add::<2>(&k, 1.0, &u, 0.0, &mut b);
+    sm.mlt_dg::<2>(&k, &u, &mut a, 1.0);
+    sa.mlt_dg::<2>(&k, &u, &mut b, 1.0);
     let scale = b.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
     let diff = a
         .iter()

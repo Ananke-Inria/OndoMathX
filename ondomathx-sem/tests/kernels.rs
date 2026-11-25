@@ -29,7 +29,7 @@ fn apply<const D: usize, S: Shape<D>, const C: usize, K: PointKernel<D, C>>(
     u: &[f64],
 ) -> Vec<f64> {
     let mut v = vec![f64::NAN; u.len()];
-    space.mlt_add::<C>(k, 1.0, u, 0.0, &mut v);
+    space.mlt_dg::<C>(k, u, &mut v, 1.0);
     v
 }
 
@@ -99,8 +99,8 @@ fn function_and_point_data_agree() {
         "acoustic stiffness",
     );
     assert_close(
-        space.c_inverse_mass(&f).diagonal().unwrap(),
-        space.c_inverse_mass(&pd).diagonal().unwrap(),
+        space.inverse_mass(&f).diagonal().unwrap(),
+        space.inverse_mass(&pd).diagonal().unwrap(),
         1e-13,
         "inverse mass",
     );
@@ -118,37 +118,37 @@ fn inverse_mass_with_fields() {
     let mesh = two_materials(square(4, 2, false, Some(partial_2d())), 1.0);
     let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
     let one = space
-        .c_inverse_mass(&Constant(1.0))
+        .inverse_mass(&Constant(1.0))
         .diagonal()
         .unwrap()
         .to_vec();
     // Acoustic mass coefficient 1/κ: inverse mass scales by κ.
     let inv_kappa = space
-        .c_inverse_mass(&Inverse(Constant(4.0)))
+        .inverse_mass(&Inverse(Constant(4.0)))
         .diagonal()
         .unwrap()
         .to_vec();
     let expected: Vec<f64> = one.iter().map(|x| 4.0 * x).collect();
     assert_close(&inv_kappa, &expected, 1e-14, "Inverse(κ)");
-    // Mass kernel assembled = 1 / inverse_mass, for a per-label coefficient.
+    // Mass kernel assembled = 1 / inverse_mass_dg, for a per-label coefficient.
     let rho = PerLabel::from_pairs(&[(1, 1.0), (2, 3.0)]);
     let mut m = apply::<2, Iso2<4>, 1, _>(
         &space,
         &Mass { coef: rho.clone() },
-        &vec![1.0; space.n_dup()],
+        &vec![1.0; space.num_dg_dofs()],
     );
-    space.c_sum_shared::<1>(&mut m);
-    let inv = space.c_inverse_mass(&rho).diagonal().unwrap().to_vec();
+    space.sum_shared::<1>(&mut m);
+    let inv = space.inverse_mass(&rho).diagonal().unwrap().to_vec();
     let expected: Vec<f64> = inv.iter().map(|x| 1.0 / x).collect();
-    assert_close(&m, &expected, 1e-14, "Σ_shared(M_ρ·1) vs 1/inverse_mass(ρ)");
+    assert_close(&m, &expected, 1e-14, "Σ_shared(M_ρ·1) vs 1/inverse_mass_dg(ρ)");
     // Total mass on a straight mesh = Σ_labels ρ·area = 1·1 + 3·1.
     let space = Space::<2, Iso2<3>>::new(
         &two_materials(square(4, 2, false, None), 1.0),
         Numbering::Continuous,
     );
-    let inv = space.c_inverse_mass(&rho).diagonal().unwrap().to_vec();
-    let mut mult = vec![1.0; space.n_dup()];
-    space.c_sum_shared::<1>(&mut mult);
+    let inv = space.inverse_mass(&rho).diagonal().unwrap().to_vec();
+    let mut mult = vec![1.0; space.num_dg_dofs()];
+    space.sum_shared::<1>(&mut mult);
     let total: f64 = inv.iter().zip(&mult).map(|(i, k)| 1.0 / (i * k)).sum();
     assert!((total - 4.0).abs() < 1e-12, "total mass {total}");
 }
@@ -185,7 +185,7 @@ fn acoustic_stiffness_kills_constants_and_is_symmetric() {
             params: vec![2.0, 1.0],
         },
     };
-    let a1 = apply(&space, &k, &vec![1.0; space.n_dup()]);
+    let a1 = apply(&space, &k, &vec![1.0; space.num_dg_dofs()]);
     assert!(a1.iter().all(|x| x.abs() < 1e-11));
     let u = space.sample::<1>(|x| [(x[0] + 2.0 * x[1]).sin() + x[2]]);
     let w = space.sample::<1>(|x| [x[0] * x[1] - x[2] * x[2]]);

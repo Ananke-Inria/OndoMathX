@@ -182,7 +182,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
             .iter()
             .map(|&m| mesh.get_element(m).label)
             .collect();
-        let shared = match numbering {
+        let dg_map = match numbering {
             Numbering::None => None,
             Numbering::Continuous => Some(Self::continuous_numbering(mesh, &mesh_elem)),
         };
@@ -208,7 +208,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
             affine,
             q1_nodes,
             q2_nodes,
-            shared,
+            dg_map,
         };
         space.nodes = space.point_geo(mesh, node_points, node_storage);
         space
