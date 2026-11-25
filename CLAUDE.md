@@ -131,10 +131,12 @@ Order of work (each step proposed in detail and approved first):
      `Cube.mesh`). sem's eight examples bit-identical, 393 workspace tests
      pass. `ondomathx-sem` is 0.2.0.
 
-Before publishing: `ondomathx-toolbox` 0.1.0 on crates.io is the empty crate,
-so the toolbox needs a new version and sem's and TetriX's `version = "0.1.0"`
-requirement on it must follow; TetriX is breaking too (its `lal` module was
-removed in step 1). Versions not yet decided.
+Versions (decided 2026-11-25): `ondomathx-toolbox` 0.1.1 (0.1.0 on crates.io
+is the empty crate; sem and TetriX require `0.1.1`), `ondomathx-sem` 0.2.0,
+`ondomathx-tetrix` 0.2.0 (breaking: `lal` removed, slices, writers),
+`ondomathx-mesh` unchanged at 0.1.0 (not republished). `cargo package -p
+ondomathx-toolbox -p ondomathx-sem -p ondomathx-tetrix` verifies the three
+together. Publish order: toolbox → sem → tetrix.
 4. **Done 2026-11-25**: the file formats in the toolbox, `io_vtk::VtkGrid`
    (header, points, one cell type, formatted once; `write` / `write_to` of
    point fields given by `value(point, comp)`: `SCALARS`, `VECTORS` for
@@ -152,8 +154,7 @@ removed in step 1). Versions not yet decided.
    113k in `acoustic_wave_cube`), TetriX's in the version and title lines
    and the points' exact digits (≤ 3.8e-14 relative). 397 workspace tests.
 
-The convergence plan (D1–D11) is complete. Not decided: the published
-versions (below); `Field` coefficients for TetriX; the names of the mass
+The convergence plan (D1–D11) is complete. Not decided: `Field` coefficients for TetriX; the names of the mass
 builders (TetriX `assemble_mass(&mut mass, α)` global-size, sem
 `local_mass(coef)` per copy, `inverse_mass(coef)`); test meshes in the
 toolbox.

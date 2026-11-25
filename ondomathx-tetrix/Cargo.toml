@@ -1,6 +1,6 @@
 [package]
 name = "ondomathx-tetrix"
-version = "0.1.0"
+version = "0.2.0"
 description = "Finite elements on tetrahedral meshes: elements with 4 to 15 nodes, a P2 space with duplicated storage, VTK and Vizir output."
 edition.workspace = true
 license.workspace = true
@@ -57,7 +57,7 @@ harness = false
 
 [dependencies]
 ondomathx-mesh = { path = "../ondomathx-mesh", version = "0.1.0" }
-ondomathx-toolbox = { path = "../ondomathx-toolbox", version = "0.1.0" }
+ondomathx-toolbox = { path = "../ondomathx-toolbox", version = "0.1.1" }
 nalgebra = "0.34"
 rayon = "1"
 sprs = "0.11"

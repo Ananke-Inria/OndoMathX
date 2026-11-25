@@ -1,6 +1,6 @@
 [package]
 name = "ondomathx-toolbox"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared tools of the OndoMathX crates."
 edition.workspace = true
 license.workspace = true
