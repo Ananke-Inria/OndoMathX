@@ -8,7 +8,7 @@
 //! [`Mass`] applies a weighted mass `∫ c u·v` to any number of components; time
 //! stepping uses [`crate::Space::c_inverse_mass`] instead, which is diagonal.
 //!
-//! Mixed kernels ([`crate::MixedKernel`], for [`crate::mlt_add_mixed`]): the
+//! Mixed kernels (`PointKernel<D, CU, CV>`, for [`Space::mlt_add_mixed`](crate::Space::mlt_add_mixed)): the
 //! divergence pair of the displacement–pressure coupling,
 //! `b(u, q) = ∫ c q div u` ([`Divergence`], `D` → 1 components) and its
 //! transpose `bᵀ(p, v) = ∫ c p div v` ([`DivergenceTranspose`], 1 → `D`).
@@ -20,13 +20,13 @@
 //! quadrature `Q`:
 //! ```ignore
 //! let mut s = vec![0.0; space.n_dup()];
-//! mlt_add_mixed::<Q, C, 1, _, _, _, _>(&space, &space, &L2Error { exact }, 1.0, &u, 0.0, &mut s);
+//! space.mlt_add_mixed::<Q, C, 1, _>(&space, &L2Error { exact }, 1.0, &u, 0.0, &mut s);
 //! let err_l2 = s.iter().sum::<f64>().sqrt();
 //! ```
 
 use nalgebra::SMatrix;
 
-use crate::engine::{MixedKernel, PointIn, PointKernel, PointOut};
+use crate::engine::{PointIn, PointKernel, PointOut};
 use crate::fields::Field;
 
 /// `a(p, q) = ∫ (1/ρ) ∇p·∇q`.
@@ -127,7 +127,7 @@ pub struct Divergence<F> {
     pub coef: F,
 }
 
-impl<const D: usize, F: Field<D>> MixedKernel<D, D, 1> for Divergence<F> {
+impl<const D: usize, F: Field<D>> PointKernel<D, D, 1> for Divergence<F> {
     const USES_GRAD: bool = true;
     const USES_XYZ: bool = F::NEEDS_XYZ;
     const USES_LABEL: bool = F::NEEDS_LABEL;
@@ -149,7 +149,7 @@ pub struct DivergenceTranspose<F> {
     pub coef: F,
 }
 
-impl<const D: usize, F: Field<D>> MixedKernel<D, 1, D> for DivergenceTranspose<F> {
+impl<const D: usize, F: Field<D>> PointKernel<D, 1, D> for DivergenceTranspose<F> {
     const USES_VALUE: bool = true;
     const USES_XYZ: bool = F::NEEDS_XYZ;
     const USES_LABEL: bool = F::NEEDS_LABEL;
@@ -170,7 +170,7 @@ pub struct L2Error<F> {
     pub exact: F,
 }
 
-impl<const D: usize, const C: usize, F: Fn([f64; D]) -> [f64; C] + Sync> MixedKernel<D, C, 1>
+impl<const D: usize, const C: usize, F: Fn([f64; D]) -> [f64; C] + Sync> PointKernel<D, C, 1>
     for L2Error<F>
 {
     const USES_VALUE: bool = true;
@@ -192,7 +192,7 @@ pub struct H1Error<F> {
     pub exact_grad: F,
 }
 
-impl<const D: usize, const C: usize, F: Fn([f64; D]) -> [[f64; D]; C] + Sync> MixedKernel<D, C, 1>
+impl<const D: usize, const C: usize, F: Fn([f64; D]) -> [[f64; D]; C] + Sync> PointKernel<D, C, 1>
     for H1Error<F>
 {
     const USES_GRAD: bool = true;

@@ -31,8 +31,8 @@ use lobattox::fields::Constant;
 use lobattox::kernels::{Divergence, IsotropicElastic};
 use lobattox::operators::{FusedKpQ4Q2, PressureMass2};
 use lobattox::{
-    mlt_add_element, mlt_add_mixed, power_iteration, stable_dt, GeoStorage, Gll, Iso2, Numbering,
-    Quad2, Space, VizirWriter, VtkField, VtkWriter,
+    power_iteration, stable_dt, GeoStorage, Gll, Iso2, Numbering, Quad2, Space, VizirWriter,
+    VtkField, VtkWriter,
 };
 use rayon::prelude::*;
 
@@ -97,8 +97,8 @@ fn main() {
     let inv_mass = disp.c_inverse_mass(&density);
     // y = (R + λ K^P) u, assembled.
     let apply = |u: &[f64], y: &mut [f64]| {
-        disp.mlt_add::<2, _>(&shear, 1.0, u, 0.0, y);
-        mlt_add_element::<2, _, _, 2, 2, _>(&disp, &disp, &kp, lambda, u, 1.0, y);
+        disp.mlt_add::<2>(&shear, 1.0, u, 0.0, y);
+        disp.mlt_add_element(&disp, &kp, lambda, u, 1.0, y);
         disp.c_sum_shared::<2>(y);
     };
 
@@ -139,7 +139,7 @@ fn main() {
         .unwrap();
     let (vtk_u, vizir_u) = (VtkWriter::new(&disp), VizirWriter::new(&disp, &mesh));
     let (vtk_p, vizir_p) = (VtkWriter::new(&pres), VizirWriter::new(&pres, &mesh));
-    let inv_mass_p = pres.inverse_mass_with::<PressureMass2, _>(&Constant(1.0));
+    let inv_mass_p = pres.inverse_mass_with::<PressureMass2>(&Constant(1.0));
     let divergence = Divergence {
         coef: Constant(1.0),
     };
@@ -168,8 +168,7 @@ fn main() {
         std::mem::swap(&mut u_prev, &mut u_now);
 
         if step > 0 && step % output_every == 0 {
-            mlt_add_mixed::<DisplacementNodes, 2, 1, 2, _, _, _>(
-                &disp,
+            disp.mlt_add_mixed::<DisplacementNodes, 2, 1, _>(
                 &pres,
                 &divergence,
                 lambda,

@@ -93,7 +93,9 @@ impl<F0: Family, F1: Family, F2: Family, const M0: usize, const M1: usize, const
 ///
 /// A direction whose rule is the shape's own nodes (Lobatto, `M = N`) has an
 /// exact identity interpolation: its pass is skipped (bitwise the same
-/// result), so on the node rule `gradient(b)` is the single `D_b` pass.
+/// result), so on the node rule `gradient(b)` is the single `D_b` pass: the
+/// hand-coded lobatto kernel for isotropic counts 4..7, the generic one
+/// otherwise.
 pub trait Sweep<const D: usize, S: Shape<D>>: Quadrature<D> {
     /// 1D matrices (fixed-size arrays): interpolation, derivative, back.
     type Tables: Send + Sync + 'static;
@@ -156,6 +158,73 @@ impl<const N: usize, const M: usize> Tables1<N, M> {
             back: interpolation_matrix::<M, N>(family, Gauss::Lobatto),
         }
     }
+}
+
+/// Applies the hardcoded lobatto kernel `$f` of each `(dir, transpose)` case.
+macro_rules! hc {
+    ($dir:ident, $t:ident, $input:ident, $output:ident, $w:ident; $($d:literal, $tr:literal => $f:ident),* $(,)?) => {
+        match ($dir, $t) {
+            $(($d, $tr) => $f::<$w>($input, $output),)*
+            _ => unreachable!(),
+        }
+    };
+}
+
+/// The hand-coded lobatto derivative kernels in 2D (isotropic `n = 4..7`):
+/// `∂/∂ξ_dir` (or its transpose) on a batch of `W` elements, `output`
+/// overwritten. Returns `false` (nothing written) for any other count; `n`
+/// is a constant after monomorphization, so the match folds.
+#[inline(always)]
+fn hc_2d<const W: usize>(
+    n: usize,
+    dir: usize,
+    transpose: bool,
+    input: &[f64],
+    output: &mut [f64],
+) -> bool {
+    match n {
+        4 => hc!(dir, transpose, input, output, W;
+            0, false => dx_q33_q33, 1, false => dy_q33_q33,
+            0, true => dx_t_q33_q33, 1, true => dy_t_q33_q33),
+        5 => hc!(dir, transpose, input, output, W;
+            0, false => dx_q44_q44, 1, false => dy_q44_q44,
+            0, true => dx_t_q44_q44, 1, true => dy_t_q44_q44),
+        6 => hc!(dir, transpose, input, output, W;
+            0, false => dx_q55_q55, 1, false => dy_q55_q55,
+            0, true => dx_t_q55_q55, 1, true => dy_t_q55_q55),
+        7 => hc!(dir, transpose, input, output, W;
+            0, false => dx_q66_q66, 1, false => dy_q66_q66,
+            0, true => dx_t_q66_q66, 1, true => dy_t_q66_q66),
+        _ => return false,
+    }
+    true
+}
+
+/// 3D version of [`hc_2d`].
+#[inline(always)]
+fn hc_3d<const W: usize>(
+    n: usize,
+    dir: usize,
+    transpose: bool,
+    input: &[f64],
+    output: &mut [f64],
+) -> bool {
+    match n {
+        4 => hc!(dir, transpose, input, output, W;
+            0, false => dx_q333_q333, 1, false => dy_q333_q333, 2, false => dz_q333_q333,
+            0, true => dx_t_q333_q333, 1, true => dy_t_q333_q333, 2, true => dz_t_q333_q333),
+        5 => hc!(dir, transpose, input, output, W;
+            0, false => dx_q444_q444, 1, false => dy_q444_q444, 2, false => dz_q444_q444,
+            0, true => dx_t_q444_q444, 1, true => dy_t_q444_q444, 2, true => dz_t_q444_q444),
+        6 => hc!(dir, transpose, input, output, W;
+            0, false => dx_q555_q555, 1, false => dy_q555_q555, 2, false => dz_q555_q555,
+            0, true => dx_t_q555_q555, 1, true => dy_t_q555_q555, 2, true => dz_t_q555_q555),
+        7 => hc!(dir, transpose, input, output, W;
+            0, false => dx_q666_q666, 1, false => dy_q666_q666, 2, false => dz_q666_q666,
+            0, true => dx_t_q666_q666, 1, true => dy_t_q666_q666, 2, true => dz_t_q666_q666),
+        _ => return false,
+    }
+    true
 }
 
 /// Whether the 1D interpolation of direction `N` nodes → `M` points of `F` is
@@ -390,6 +459,9 @@ impl<
         tmp: &mut [f64],
     ) {
         let [s0, s1] = id2::<F0, F1>(N0, M0, N1, M1);
+        if s0 && s1 && N0 == N1 && hc_2d::<W>(N0, b, false, i, o) {
+            return;
+        }
         match b {
             0 => fwd2::<N0, M0, N1, M1, W>(&t.0.deriv, &t.1.interp, [false, s1], i, o, tmp),
             _ => fwd2::<N0, M0, N1, M1, W>(&t.0.interp, &t.1.deriv, [s0, false], i, o, tmp),
@@ -403,6 +475,9 @@ impl<
         tmp: &mut [f64],
     ) {
         let [s0, s1] = id2::<F0, F1>(N0, M0, N1, M1);
+        if s0 && s1 && N0 == N1 && hc_2d::<W>(N0, b, true, i, o) {
+            return;
+        }
         match b {
             0 => trans2::<N0, M0, N1, M1, W>(&t.0.deriv, &t.1.interp, [false, s1], i, o, tmp),
             _ => trans2::<N0, M0, N1, M1, W>(&t.0.interp, &t.1.deriv, [s0, false], i, o, tmp),
@@ -468,6 +543,9 @@ impl<
         tmp: &mut [f64],
     ) {
         let [s0, s1, s2] = id3::<F0, F1, F2>([N0, N1, N2], [M0, M1, M2]);
+        if s0 && s1 && s2 && N0 == N1 && N1 == N2 && hc_3d::<W>(N0, b, false, i, o) {
+            return;
+        }
         match b {
             0 => fwd3::<N0, M0, N1, M1, N2, M2, W>(
                 &t.0.deriv,
@@ -506,6 +584,9 @@ impl<
         tmp: &mut [f64],
     ) {
         let [s0, s1, s2] = id3::<F0, F1, F2>([N0, N1, N2], [M0, M1, M2]);
+        if s0 && s1 && s2 && N0 == N1 && N1 == N2 && hc_3d::<W>(N0, b, true, i, o) {
+            return;
+        }
         match b {
             0 => trans3::<N0, M0, N1, M1, N2, M2, W>(
                 &t.0.deriv,

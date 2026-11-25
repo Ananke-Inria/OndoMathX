@@ -46,13 +46,13 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Assembled operator of the continuous space: `out = Σ_shared(K_loc u)`,
     /// i.e. [`Space::mlt_add`] with `α = 1`, `β = 0` followed by
     /// [`Space::c_sum_shared`]. `out` is overwritten.
-    pub fn c_apply<const C: usize, K: PointKernel<D, C>>(
+    pub fn c_apply<const C: usize>(
         &self,
-        kernel: &K,
+        kernel: &impl PointKernel<D, C>,
         u: &[f64],
         out: &mut [f64],
     ) {
-        self.mlt_add::<C, K>(kernel, 1.0, u, 0.0, out);
+        self.mlt_add::<C>(kernel, 1.0, u, 0.0, out);
         self.c_sum_shared::<C>(out);
     }
 
@@ -62,15 +62,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         let nloc = Self::NLOC;
         assert_eq!(diag.len(), self.n_dup(), "diagonal length");
         assert_eq!(v.len(), self.n_dup() * C, "vector length");
-        v.par_chunks_mut(C * nloc)
-            .zip(diag.par_chunks(nloc))
-            .for_each(|(block, d)| {
-                for comp in block.chunks_exact_mut(nloc) {
-                    for (x, s) in comp.iter_mut().zip(d) {
-                        *x *= s;
-                    }
-                }
-            });
+        scale_nodes::<C>(nloc, diag, v);
     }
 
     /// `Σ_dup m · a·b` over the duplicated nodes and the `C` components. With
@@ -131,10 +123,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// `mass`: [`power_iteration`] from [`Space::c_start_vector`], with
     /// `x ↦ M⁻¹ Σ_shared(K_loc x)` and the GLL mass product. Panics without the
     /// continuous numbering.
-    pub fn c_max_eigenvalue<const C: usize, K: PointKernel<D, C>, F: Field<D>>(
+    pub fn c_max_eigenvalue<const C: usize>(
         &self,
-        kernel: &K,
-        mass: &F,
+        kernel: &impl PointKernel<D, C>,
+        mass: &impl Field<D>,
         max_iter: usize,
         rtol: f64,
     ) -> EigenEstimate {
@@ -143,7 +135,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         power_iteration(
             self.c_start_vector::<C>(),
             |x, y| {
-                self.c_apply::<C, K>(kernel, x, y);
+                self.c_apply::<C>(kernel, x, y);
                 inv_m.apply::<C>(y);
             },
             |a, b| self.mass_inner::<C>(&m, a, b),
@@ -195,4 +187,18 @@ pub fn power_iteration(
         std::mem::swap(&mut x, &mut y);
     }
     est
+}
+
+/// `v[e][c][node] *= diag[e·nloc + node]` for every component: the body of
+/// [`Space::scale_by`] and of the diagonal [`crate::InverseMass::apply`].
+pub(crate) fn scale_nodes<const C: usize>(nloc: usize, diag: &[f64], v: &mut [f64]) {
+    v.par_chunks_mut(C * nloc)
+        .zip(diag.par_chunks(nloc))
+        .for_each(|(block, d)| {
+            for comp in block.chunks_exact_mut(nloc) {
+                for (x, s) in comp.iter_mut().zip(d) {
+                    *x *= s;
+                }
+            }
+        });
 }

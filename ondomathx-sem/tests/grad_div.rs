@@ -1,16 +1,15 @@
-//! `operators::GradDivQ4Q2` (cornea `GradDiv.h`: `b_h` by Green's formula,
-//! lumped GLL 3 pressure mass) against `operators::FusedKp` with `b_h` on the
-//! displacement GLL rule (option 2) and the same lumped pressure mass: the
-//! article's equivalence of the options on Q1 meshes.
+//! `operators::FusedKpQ4Q2` (`b_h` by Green's formula as in cornea
+//! `GradDiv.h`, Gauss–Legendre 3 pressure mass) against `operators::FusedKp`
+//! with `b_h` on the displacement GLL rule (option 2) and the same pressure
+//! mass: the article's equivalence of the options on Q1 meshes.
 
 mod common;
 
 use anamesh::mesh::Mesh;
 use common::*;
-use lobattox::operators::{FusedKp, GradDivQ4Q2};
+use lobattox::operators::{FusedKp, FusedKpQ4Q2, PressureMass2, PressureMass3};
 use lobattox::{
-    mlt_add_element, ElementOperator, GeoStorage, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape,
-    Space,
+    ElementOperator, GeoStorage, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape, Space,
 };
 
 fn seeded(n: usize, seed: u64) -> Vec<f64> {
@@ -44,7 +43,7 @@ fn apply<const D: usize, S: Shape<D>, Op: ElementOperator<D, S, S, D, D>>(
     u: &[f64],
 ) -> Vec<f64> {
     let mut v = vec![0.0; u.len()];
-    mlt_add_element::<D, _, _, D, D, _>(s, s, op, 1.0, u, 0.0, &mut v);
+    s.mlt_add_element(s, op, 1.0, u, 0.0, &mut v);
     v
 }
 
@@ -52,15 +51,16 @@ fn apply<const D: usize, S: Shape<D>, Op: ElementOperator<D, S, S, D, D>>(
 /// checking that `K₃` is symmetric and positive semi-definite.
 fn options_2d(mesh: &impl Mesh, c: f64) -> f64 {
     type QB = Quad2<Gll<5>, Gll<5>>;
-    type QM = Quad2<Gll<3>, Gll<3>>;
+    type QM = PressureMass2;
     let disp = Space::<2, Iso2<5>>::builder(mesh)
         .numbering(Numbering::Continuous)
         .quadrature::<QB>(GeoStorage::Store)
+        .quadrature::<QM>(GeoStorage::Store)
         .build();
     let pres = Space::<2, Iso2<3>>::builder(mesh)
         .quadrature::<QM>(GeoStorage::Store)
         .build();
-    let k3 = GradDivQ4Q2::<2>::new(&disp, c);
+    let k3 = FusedKpQ4Q2::<2>::new(&disp, c);
     let k2 = FusedKp::<2, Iso2<5>, Iso2<3>, QB, QM>::new(&disp, &pres, c);
     let (u, w) = (seeded(disp.n_dup() * 2, 1), seeded(disp.n_dup() * 2, 2));
     let (k3u, k3w) = (apply(&disp, &k3, &u), apply(&disp, &k3, &w));
@@ -75,15 +75,16 @@ fn options_2d(mesh: &impl Mesh, c: f64) -> f64 {
 
 fn options_3d(mesh: &impl Mesh) -> f64 {
     type QB = Quad3<Gll<5>, Gll<5>, Gll<5>>;
-    type QM = Quad3<Gll<3>, Gll<3>, Gll<3>>;
+    type QM = PressureMass3;
     let disp = Space::<3, Iso3<5>>::builder(mesh)
         .numbering(Numbering::Continuous)
         .quadrature::<QB>(GeoStorage::Store)
+        .quadrature::<QM>(GeoStorage::Store)
         .build();
     let pres = Space::<3, Iso3<3>>::builder(mesh)
         .quadrature::<QM>(GeoStorage::Store)
         .build();
-    let k3 = GradDivQ4Q2::<3>::new(&disp, 1.0);
+    let k3 = FusedKpQ4Q2::<3>::new(&disp, 1.0);
     let k2 = FusedKp::<3, Iso3<5>, Iso3<3>, QB, QM>::new(&disp, &pres, 1.0);
     let u = seeded(disp.n_dup() * 3, 3);
     max_rel(&apply(&disp, &k3, &u), &apply(&disp, &k2, &u))
@@ -106,6 +107,10 @@ fn green_and_quadrature_options_agree_on_q1_meshes_2d() {
     assert!(
         options_2d(&square(3, 2, false, Some(bending_2d())), 2.5) < 1e-12,
         "c = 2.5"
+    );
+    assert!(
+        options_2d(&square(3, 2, false, None), 1.3) < 1e-12,
+        "c = 1.3"
     );
 }
 
@@ -172,74 +177,4 @@ fn options_on_curved_and_mapped_elements() {
         mapped > 1e-10 && mapped_3d > 1e-10,
         "mapped: {mapped:e}, {mapped_3d:e}"
     );
-}
-
-/// `FusedKpQ4Q2` (Green's `B` of `GradDivQ4Q2`, Gauss–Legendre pressure mass)
-/// against `FusedKp` (option 2, same Gauss–Legendre mass): equal on Q1/Q2
-/// meshes, different on non-separable mapped elements.
-fn gl_options_2d(mesh: &impl Mesh) -> f64 {
-    use lobattox::operators::{FusedKpQ4Q2, PressureMass2};
-    use lobattox::Gl;
-    type QB = Quad2<Gll<5>, Gll<5>>;
-    let disp = Space::<2, Iso2<5>>::builder(mesh)
-        .numbering(Numbering::Continuous)
-        .quadrature::<QB>(GeoStorage::Store)
-        .quadrature::<PressureMass2>(GeoStorage::Store)
-        .build();
-    let pres = Space::<2, Iso2<3>>::builder(mesh)
-        .quadrature::<Quad2<Gl<3>, Gl<3>>>(GeoStorage::Store)
-        .build();
-    let k3 = FusedKpQ4Q2::<2>::new(&disp, 1.3);
-    let k2 = FusedKp::<2, Iso2<5>, Iso2<3>, QB, Quad2<Gl<3>, Gl<3>>>::new(&disp, &pres, 1.3);
-    let (u, w) = (seeded(disp.n_dup() * 2, 5), seeded(disp.n_dup() * 2, 6));
-    let (k3u, k3w) = (apply(&disp, &k3, &u), apply(&disp, &k3, &w));
-    let (a, b) = (dot(&k3u, &w), dot(&u, &k3w));
-    assert!(
-        (a - b).abs() < 1e-11 * a.abs().max(1.0),
-        "symmetry {a} vs {b}"
-    );
-    assert!(dot(&k3u, &u) >= 0.0);
-    max_rel(&k3u, &apply(&disp, &k2, &u))
-}
-
-fn gl_options_3d(mesh: &impl Mesh) -> f64 {
-    use lobattox::operators::{FusedKpQ4Q2, PressureMass3};
-    use lobattox::Gl;
-    type QB = Quad3<Gll<5>, Gll<5>, Gll<5>>;
-    type QM = Quad3<Gl<3>, Gl<3>, Gl<3>>;
-    let disp = Space::<3, Iso3<5>>::builder(mesh)
-        .numbering(Numbering::Continuous)
-        .quadrature::<QB>(GeoStorage::Store)
-        .quadrature::<PressureMass3>(GeoStorage::Store)
-        .build();
-    let pres = Space::<3, Iso3<3>>::builder(mesh)
-        .quadrature::<QM>(GeoStorage::Store)
-        .build();
-    let k3 = FusedKpQ4Q2::<3>::new(&disp, 1.0);
-    let k2 = FusedKp::<3, Iso3<5>, Iso3<3>, QB, QM>::new(&disp, &pres, 1.0);
-    let u = seeded(disp.n_dup() * 3, 7);
-    max_rel(&apply(&disp, &k3, &u), &apply(&disp, &k2, &u))
-}
-
-#[test]
-fn fused_kp_q4q2_with_gauss_legendre_mass() {
-    for (mesh, what) in [
-        (square(3, 2, false, None), "affine"),
-        (square(5, 3, false, Some(partial_2d())), "affine + Q1"),
-        (square(3, 2, true, Some(bending_2d())), "curved Q2"),
-    ] {
-        let err = gl_options_2d(&mesh);
-        assert!(err < 1e-12, "{what}: {err:e}");
-    }
-    for mesh in [
-        cube([2, 1, 2], false, Some(bending_3d())),
-        cube([2, 1, 2], true, Some(bending_3d())),
-    ] {
-        let err = gl_options_3d(&mesh);
-        assert!(err < 1e-12, "3D: {err:e}");
-    }
-    let circle = anamesh::mesh::circle::Circle::new([0.3, -0.2], 1.5, 7, None, None);
-    let mapped = gl_options_2d(&circle);
-    println!("FusedKpQ4Q2 vs FusedKp (GL mass) on the Circle: {mapped:e}");
-    assert!(mapped > 1e-10);
 }

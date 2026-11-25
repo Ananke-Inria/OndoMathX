@@ -52,8 +52,8 @@ fn numbering_does_not_change_storage_or_local_operators() {
     };
     let u = seeded(sc.n_dup() * 3, 1);
     let (mut vc, mut vd) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    sc.mlt_add::<3, _>(&k, 1.0, &u, 0.0, &mut vc);
-    sd.mlt_add::<3, _>(&k, 1.0, &u, 0.0, &mut vd);
+    sc.mlt_add::<3>(&k, 1.0, &u, 0.0, &mut vc);
+    sd.mlt_add::<3>(&k, 1.0, &u, 0.0, &mut vd);
     assert_eq!(vc, vd);
     assert_eq!(sc.local_mass(&Constant(2.0)), sd.local_mass(&Constant(2.0)));
 }
@@ -92,7 +92,7 @@ fn c_max_eigenvalue_panics_without_numbering() {
         lambda: Constant(2.0),
         mu: Constant(1.0),
     };
-    let _ = s.c_max_eigenvalue::<2, _, _>(&k, &Constant(1.0), 10, 1e-6);
+    let _ = s.c_max_eigenvalue::<2>(&k, &Constant(1.0), 10, 1e-6);
 }
 
 /// `inverse_mass` is the element-local mass inverse on any space, bit for bit
@@ -131,7 +131,7 @@ fn inverse_mass_inverts_the_mass_operator() {
     let sd = Space::<3, Iso3<4>>::new(&mesh, Numbering::None);
     let u = seeded(sd.n_dup() * 2, 2);
     let mut v = vec![0.0; u.len()];
-    sd.mlt_add::<2, _>(&mass, 1.0, &u, 0.0, &mut v);
+    sd.mlt_add::<2>(&mass, 1.0, &u, 0.0, &mut v);
     sd.inverse_mass(&coef).apply::<2>(&mut v);
     assert!(max_rel_diff(&v, &u) < 1e-14, "discontinuous");
 
@@ -139,7 +139,7 @@ fn inverse_mass_inverts_the_mass_operator() {
     let mut u = seeded(sc.n_dup() * 2, 3);
     sc.c_sum_shared::<2>(&mut u); // continuous
     let mut v = vec![0.0; u.len()];
-    sc.c_apply::<2, _>(&mass, &u, &mut v);
+    sc.c_apply::<2>(&mass, &u, &mut v);
     sc.c_inverse_mass(&coef).apply::<2>(&mut v);
     assert!(max_rel_diff(&v, &u) < 1e-14, "continuous");
 }

@@ -207,7 +207,7 @@ fn check_vs_reference<const D: usize, S: Shape<D>>(mesh: &UnstructuredMesh, what
     };
     let u = seeded(space.n_dup() * D, 2);
     let mut v = vec![f64::NAN; u.len()];
-    space.mlt_add::<D, _>(&el, 1.0, &u, 0.0, &mut v);
+    space.mlt_add::<D>(&el, 1.0, &u, 0.0, &mut v);
     assert_close(
         &v,
         &reference::<D, S, D, _>(&space, &el, &u),
@@ -329,10 +329,10 @@ fn batch_width_does_not_change_the_result() {
     let run = |w: usize| {
         let mut v = vec![0.0; u.len()];
         match w {
-            1 => space.mlt_add_batched::<1, 1, _>(&k, 1.0, &u, 0.0, &mut v),
-            3 => space.mlt_add_batched::<1, 3, _>(&k, 1.0, &u, 0.0, &mut v),
-            4 => space.mlt_add_batched::<1, 4, _>(&k, 1.0, &u, 0.0, &mut v),
-            _ => space.mlt_add_batched::<1, 8, _>(&k, 1.0, &u, 0.0, &mut v),
+            1 => space.mlt_add_batched::<1, 1>(&k, 1.0, &u, 0.0, &mut v),
+            3 => space.mlt_add_batched::<1, 3>(&k, 1.0, &u, 0.0, &mut v),
+            4 => space.mlt_add_batched::<1, 4>(&k, 1.0, &u, 0.0, &mut v),
+            _ => space.mlt_add_batched::<1, 8>(&k, 1.0, &u, 0.0, &mut v),
         }
         v
     };
@@ -422,7 +422,7 @@ fn elastic_rigid_modes_and_energy() {
         ] {
             let u = space.sample::<2>(f);
             let mut v = vec![0.0; u.len()];
-            space.mlt_add::<2, _>(el, 1.0, &u, 0.0, &mut v);
+            space.mlt_add::<2>(el, 1.0, &u, 0.0, &mut v);
             assert!(
                 v.iter().all(|x| x.abs() < 1e-11),
                 "N={:?}: rigid mode not in kernel",
@@ -446,7 +446,7 @@ fn elastic_rigid_modes_and_energy() {
     ] {
         let u = space.sample::<3>(f);
         let mut v = vec![0.0; u.len()];
-        space.mlt_add::<3, _>(&el, 1.0, &u, 0.0, &mut v);
+        space.mlt_add::<3>(&el, 1.0, &u, 0.0, &mut v);
         assert!(
             v.iter().all(|x| x.abs() < 1e-11),
             "3D rigid mode not in kernel"
@@ -457,7 +457,7 @@ fn elastic_rigid_modes_and_energy() {
     let space = Space::<2, Iso2<3>>::new(&square(3, 2, false, None), Numbering::Continuous);
     let u = space.sample::<2>(|x| [0.3 * x[0] + 0.2 * x[1], 0.2 * x[0] - 0.1 * x[1]]);
     let mut v = vec![0.0; u.len()];
-    space.mlt_add::<2, _>(&el, 1.0, &u, 0.0, &mut v);
+    space.mlt_add::<2>(&el, 1.0, &u, 0.0, &mut v);
     let exact = 2.0 * (2.0 * 0.2f64.powi(2) + 2.0 * 0.7 * (0.09 + 0.01 + 2.0 * 0.04));
     let e = dot(&u, &v);
     assert!((e - exact).abs() < 1e-12, "elastic energy {e} vs {exact}");

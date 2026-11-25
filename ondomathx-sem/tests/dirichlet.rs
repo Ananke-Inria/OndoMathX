@@ -11,7 +11,7 @@ use anamesh::mesh::square::Square;
 use common::*;
 use lobattox::fields::Constant;
 use lobattox::kernels::{AcousticStiffness, H1Error, L2Error};
-use lobattox::{mlt_add_mixed, GeoStorage, Gl, Iso2, Iso3, Numbering, Quad2, Shape, Space};
+use lobattox::{GeoStorage, Gl, Iso2, Iso3, Numbering, Quad2, Shape, Space};
 
 /// Mask value at every node against a geometric predicate of the boundary.
 fn check_mask<const D: usize, S: Shape<D>>(
@@ -107,7 +107,7 @@ fn dirichlet_eigenmode() {
     let k = AcousticStiffness { rho: Constant(1.0) };
     let u = space.sample::<1>(|x| [(PI * x[0]).sin() * (PI * x[1]).sin()]);
     let mut y = vec![0.0; u.len()];
-    space.c_apply::<1, _>(&k, &u, &mut y);
+    space.c_apply::<1>(&k, &u, &mut y);
     space.c_inverse_mass(&Constant(1.0)).apply::<1>(&mut y);
     for (yi, m) in y.iter_mut().zip(&mask) {
         *yi *= m;
@@ -138,9 +138,9 @@ fn error_kernels_integrate_the_squared_error() {
     let total = |u: &[f64], h1_norm: bool| -> f64 {
         let mut s = vec![0.0; space.n_dup()];
         if h1_norm {
-            mlt_add_mixed::<Q, 1, 1, 2, _, _, _>(&space, &space, &h1, 1.0, u, 0.0, &mut s);
+            space.mlt_add_mixed::<Q, 1, 1, _>(&space, &h1, 1.0, u, 0.0, &mut s);
         } else {
-            mlt_add_mixed::<Q, 1, 1, 2, _, _, _>(&space, &space, &l2, 1.0, u, 0.0, &mut s);
+            space.mlt_add_mixed::<Q, 1, 1, _>(&space, &l2, 1.0, u, 0.0, &mut s);
         }
         s.iter().sum()
     };

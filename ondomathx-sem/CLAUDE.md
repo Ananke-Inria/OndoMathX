@@ -114,6 +114,9 @@ cargo fmt
   products can be chained before summing.
 - **As implemented (step 4, `engine.rs`):**
   - `trait PointKernel<const D, const C>: Sync` with `apply(&PointIn, &mut PointOut)`.
+    Since 2026-11-24 `PointKernel<const D, const CU, const CV = CU>` (stable
+    const default): one trait for same-space and mixed kernels, replacing
+    `MixedKernel` and its blanket impl; `PointKernel<D, C>` code is unchanged.
     - `PointIn { value: SVector<C>, grad: SMatrix<C, D>, xyz: SVector<D>, label, dof }`,
       where `dof = e·NLOC + node`. Unused fields are zero.
     - `PointOut { flux: SMatrix<C, D>, source: SVector<C> }`, zeroed before
@@ -125,17 +128,23 @@ cargo fmt
   - Entry point: `Space::mlt_add(kernel, α, u, β, v)` with W = 4;
     `mlt_add_batched::<C, W, K>` for another width. The results are
     bitwise-identical for any W (tested).
+  - **One product path** (since 2026-11-24): `mlt_add` is the mixed product
+    on the space's own node rule `S::Nodes` (`Pointwise` run by the element
+    driver); the former dedicated engine loop is gone. See "Performance" in
+    the roadmap for the measurements.
   - Pull-back: `H = sign(det J)·w·G·cof(J)`, then `y = Σ_b D_bᵀ H_b + w·|det J|·S`.
     The division by `det J` happens only in the push-forward.
   - Parallelism: each geometric group is split into W-element chunks of `v`
     (`par_chunks_mut` + `for_each_init` scratch). Writes are disjoint, so there
-    is no `unsafe`. Each kind is a const generic, so each group gets its own
-    monomorphized loop.
+    is no `unsafe`. `Pointwise` dispatches each batch on its kind to a const
+    generic, so each group gets its own monomorphized point loop.
   - Padded lanes reuse the last valid element's geometry (finite values). Their
     input is zero and their output is not scattered.
-  - Derivatives (since step 8): `Shape::ref_derivative`, lobatto hc kernels
-    for isotropic N = 4..7, generic rectangular kernels (square matrix per
-    direction) otherwise; the choice folds at compile time.
+  - Derivatives: `Sweep::gradient` / `gradient_t`. On the node rule the
+    interpolations are identities (skipped) and each derivative is one pass:
+    lobatto hc kernels for isotropic N = 4..7 (`shape::hc_2d` / `hc_3d`),
+    generic rectangular kernels otherwise; the choice folds at compile time.
+    (Until 2026-11-24: `Shape::ref_derivative`, removed with the engine loop.)
   - Geometry (since step 8): affine `det`/`cof` are hoisted per lane. Q1/Q2
     maps are evaluated per point from full tables of the **Anamesh shape
     functions** at the nodes (`GeometricElement::tabulate`, `GeoTab` in
@@ -256,7 +265,8 @@ cargo fmt
     Generic cost ≈ 0.18 (NP=2), 0.27 (3), 0.35 (4), 0.44 (5), 0.54 (6),
     0.63 (7), 0.75–0.88 (8), 0.81 (9) ns/dof per derivative.
   - **Kernel choice in LobattoX:** hc kernels for P = 3..6, generic kernels for
-    P = 1, 2, 7, 8, selected in the per-NP monomorphization (`NP = P+1`).
+    P = 1, 2, 7, 8, selected at compile time in `Sweep::gradient` /
+    `gradient_t` when every direction is the node rule (`NP = P+1`).
   - `lobatto::tables` (added 2026-11-20): `points_weights<N>(Gauss)`,
     `interpolation_matrix<NI, NO>(from, to)`, `derivative_matrix<NI, NO>(from,
     to)` (fixed-size, `m[j][i]`), and their run-time-size versions
@@ -359,7 +369,11 @@ dedicated implementation. This section revises "Method and storage" and
 - **Chosen per operator, from a fixed list given at construction**:
   `Space::new(mesh, quadratures)`. Entry 0 is always the space's own GLL nodes
   (implicit). An operator call names its quadrature by type; the type is
-  checked against the list at the start of the call.
+  checked against the list at the start of the call. Since 2026-11-24 the
+  implicit entry has a type, `S::Nodes` (`Shape::Nodes`), accepted wherever
+  a declared quadrature is (`mlt_add_mixed`, `local_load_with`,
+  `quadrature_*`, `inverse_mass_with`, `Batch::quadrature`) with the node
+  geometry; a declared `S::Nodes` entry takes precedence.
 - **Geometry on each quadrature: stored or recomputed**, a run-time choice per
   entry (branch once per batch of W elements, both paths compiled). Stored =
   `cof(J)` and `det J` at every point (kernel-agnostic; 10 values per point in
@@ -371,6 +385,7 @@ dedicated implementation. This section revises "Method and storage" and
   from each space's GLL nodes to the points of `q` with the lobatto
   rectangular kernels, and back with their transposes. The current
   `Space::mlt_add` (same space, quadrature = nodes) stays as the fast path.
+  (Since 2026-11-24 it is this product on the node rule, at the same speed.)
 - Same-mesh guarantee: spaces built from the same mesh have the same element
   order (classification is deterministic); a mixed call checks a mesh
   fingerprint (O(1)).
@@ -564,7 +579,8 @@ each step tested before the next:
 8. ~~Shape markers `Space<D, S>`, anisotropic counts; kernel selection and 1D
    tables move into the marker impls; `gll.rs` removed~~: done (2026-11-20).
    - `shape.rs`: `Shape<D>` (`N`, `NLOC`, `ISOTROPIC`, `Tables`,
-     `points_1d`, `weights_1d`, `ref_derivative::<W>`), `Gll2<N0, N1>`,
+     `points_1d`, `weights_1d`, `ref_derivative::<W>` — removed 2026-11-24,
+     with `Gll1::d`), `Gll2<N0, N1>`,
      `Gll3<N0, N1, N2>`, `Iso2<N>`, `Iso3<N>`, per-direction `Gll1<N>` from
      `lobatto::tables`. `Space::multi_index`, `ref_point`, `points_1d`,
      `weights_1d` replace `gll()`. VTK tessellates per direction.
@@ -596,7 +612,8 @@ each step tested before the next:
      `.quadrature::<Q>(GeoStorage)` (one call per rule, duplicates panic),
      `.build()`. An entry stores its points, weights, `PointGeo` and the typed
      sweep tables (`Box<dyn Any>`, found by `TypeId`; an undeclared `Q`
-     panics). `GeoStorage::Store` keeps `x`, `det J`, `cof J` per point
+     panics). Since 2026-11-24 `Pointwise` borrows them (and the node rule's,
+     `Space::node_sweep`) instead of building them at every call. `GeoStorage::Store` keeps `x`, `det J`, `cof J` per point
      (`StoredGeo`; `map_and_jacobian` rebuilds `J = cof(cof J)/det^(D−2)`).
    - Outputs: `quadrature_weights::<Q>()` (`w·|det J|`), `quadrature_xyz::<Q>()`,
      `quadrature_values::<Q, C>(u)` (`[elem][comp][q]`, W = 1 sweeps): true L²
@@ -622,7 +639,8 @@ each step tested before the next:
      panics.
 10. ~~Mixed product; tensor inverse mass of a quadrature~~: done (2026-11-20).
     - `MixedKernel<D, CU, CV>` (same flags as `PointKernel`; blanket impl
-      for every `PointKernel<D, C>` as `<D, C, C>`). Kernels `Divergence`
+      for every `PointKernel<D, C>` as `<D, C, C>`; merged into
+      `PointKernel<D, CU, CV = CU>` on 2026-11-24). Kernels `Divergence`
       (`b(u, q) = ∫ c q div u`, `D` → 1) and `DivergenceTranspose`
       (`bᵀ(p, v) = ∫ c p div v = ∫ (c p I) : ∇v`, 1 → `D`: the gradient falls
       on the test function).
@@ -703,7 +721,8 @@ each step tested before the next:
     - `mlt_add_mixed` is now `Pointwise<K, Q, SU, SV>` run by
       `mlt_add_element`: outputs bit-identical (hash of 2D/3D, all kinds,
       stored/recomputed, five kernels, before/after), same speed. The
-      same-space `mlt_add` keeps its own path (hc kernels).
+      same-space `mlt_add` keeps its own path (hc kernels) — until
+      2026-11-24, when it became `Pointwise` on the node rule.
     - Tests `tests/element.rs` (4): hand-written nodal mass = `Mass` kernel
       engine (bitwise), per-element data + labels + padded lanes + α/β, a
       declared quadrature through the batch (area 2.6), different meshes
@@ -729,7 +748,14 @@ each step tested before the next:
       `λ K^P u` added to `y`): fused 1.14 ns per displacement dof vs 1.52
       for the three operators, and no global pressure vector.
 15. ~~`b_h` option 3 (Green's formula) as a hard-coded `ElementOperator`~~: done
-    (2026-11-20). `operators::GradDivQ4Q2::<D>::new(&disp, mass_coef)`
+    (2026-11-20). **`GradDivQ4Q2` (lumped GLL 3 pressure mass) removed on
+    2026-11-24** (decided: the Q4–Q2 operator uses the Gauss–Legendre mass
+    only); its `B`/`Bᵀ` live in `FusedKpQ4Q2` (outputs bitwise unchanged),
+    scratch `FusedKpQ4Q2Scratch`, and `tests/grad_div.rs` checks the
+    equivalence of the options with the Gauss–Legendre mass (same meshes:
+    Q1 to 1e-12, Q2 6e-16 2D / 8e-16 3D, Circle 1.3e-3, twisted cube
+    4.3e-4). Record of the lumped operator:
+    `operators::GradDivQ4Q2::<D>::new(&disp, mass_coef)`
     (D = 2, 3, Q4 displacement only): port of cornea `GradDiv.h` (decided:
     the hard-coded Q4–Q2 operator, no general face integrals). Precomputed
     `bndy` (`BndyMatrix`: `cof(J)·n̂ × 1D face weights` at the nodes of each
@@ -843,9 +869,75 @@ Later, unordered:
   pass whose 1D interpolation is the identity — Lobatto rule with `M = N` —
   is not run, bitwise the same results; 8000 Q1 hexes, 14 threads: mixed
   Laplace on the nodes 1.94 → 1.45 ns/dof (`mlt_add` 1.2), `B` on the GLL 5
-  rule 0.85 → 0.65, `Bᵀ` 1.0 → 0.75 ns per displacement dof); the hc
-  derivative kernels on the remaining `D_b` pass of the node rule (the rest of
-  the gap to `mlt_add`); W > 1 in `quadrature_values`. Element renumbering for locality; fusing the shared-DOF sum with
+  rule 0.85 → 0.65, `Bᵀ` 1.0 → 0.75 ns per displacement dof); ~~the hc
+  derivative kernels on the remaining `D_b` pass of the node rule~~ and
+  ~~one product path~~ (done 2026-11-24, below); W > 1 in
+  `quadrature_values`.
+  - **One product path** (2026-11-24): `Shape::Nodes` (the node rule as a
+    quadrature type), hc kernels in `Sweep::gradient(_t)` on the node rule,
+    `Space::mlt_add(_batched)` = `Pointwise::<K, S::Nodes, S, S>` run by
+    `mlt_add_element_batched`; the engine's own driver and point loop
+    (~250 lines) and `Shape::ref_derivative` removed. Outputs bitwise
+    identical to before (hash of 14 cases: 2D/3D, affine/Q1/Q2/mapped,
+    stored/recomputed, hc and generic counts, W = 1, 3, 4, 8, five
+    kernels). What made `Pointwise` as fast as the engine (found in the
+    assembly, not the source): `geo_at` / `tab_eval` forced inline (they were
+    out-of-line calls per point and lane); every scratch buffer re-sliced to
+    its constant length at the top of the per-kind loop (bounds checks
+    dropped: the scratch is allocated in another function); driver sizes
+    recomputed from the consts inside the rayon closure (captured, they were
+    unknown runtime values in the gather/scatter loops); one gradient/flux
+    buffer; sweep tables borrowed, not rebuilt per call (20 µs at P = 4);
+    unused scratch buffers empty; the first transposed pass writes
+    `0 + t` instead of zeroing `y`. Timings (scratch benchmark, ns/dof,
+    before → after; 3D P = 4, 512 hexes, 1 thread): `mlt_add` Laplace
+    affine 6.0–6.4 → 5.6, Q1 7.3–8.0 → 5.6–5.8; mixed on the nodes Laplace
+    Q1 8.5–9.8 → 5.5–5.6, elastic 7.0–8.1 → 5.9–6.0; `div` on GL 3 2.1–2.7 →
+    1.8–2.0. 2D P = 4 (40 × 40, 1 thread): Laplace 5.1 → 4.1–4.2, elastic
+    5.17 → 5.26–5.35 (+2 %, the one case slower). 14 threads, 12³ P = 4
+    cube: `mlt_add` Laplace 1.15–1.35 → 1.07–1.14, mixed on the nodes
+    1.5–1.7 → 1.05–1.14 (Laplace), 1.46–1.53 → 0.87–0.92 (elastic). The
+    examples `acoustic_wave_cube` and `elastic_wave_square` measured 0–20 %
+    slower per step, but under a load average of 3–10 from other processes:
+    **to re-measure on a quiet machine** before trusting either way.
+  - Follow-up simplifications (2026-11-24, no public name changed):
+    `local_load` = `local_load_with::<S::Nodes>` (bitwise); the hc helpers
+    (`hc_2d`, `hc_3d`) live in `quadrature.rs`, their only user;
+    `Space::weight` reads `node_weights`; `PointIn::zeros` /
+    `PointOut::zeros` (crate-private); `ops::scale_nodes` shared by
+    `scale_by` and the diagonal `InverseMass::apply`. Test
+    `node_rule_is_implicit` (implicit = declared node rule, `mlt_add_mixed`
+    on it = `mlt_add`, `local_load` = `local_load_with`, all bitwise).
+  - Readability pass (2026-11-25), outputs bitwise unchanged (`mlt_add`
+    hash of 14 cases, `FusedKpQ4Q2` hash of 5 meshes), same speed:
+    - **Call sites**: kernels and fields are `impl Trait` arguments, and the
+      mixed and element products are methods of the trial space, like
+      `mlt_add`: `space.mlt_add::<C>(&k, …)`,
+      `u_space.mlt_add_mixed::<Q, CU, CV, _>(&v_space, &k, …)` (the `_` is
+      the test shape: Rust infers no generic argument once one is written,
+      and `Q` must be written), `u_space.mlt_add_element(&v_space, &op, …)`
+      (`CU`, `CV` inferred from the operator), `c_apply::<C>`,
+      `c_max_eigenvalue::<C>`, `inverse_mass_with::<Q>`. The free functions
+      `mlt_add_mixed` / `mlt_add_element` are gone.
+    - **Named geometry groups**: `GroupRanges { affine, q1, q2, mapped }`
+      replaces `ranges: [Range; 4]` + `GeoKind::index()`; `PointGeo { q1,
+      q2, mapped }` with `GroupGeo::{Tabulated, Stored}` replaces
+      `tabs[g − 1]` / `stored[g − 1]`; `geo_at` and `map_and_jacobian` are a
+      `match` on the kind.
+    - **Named steps**: `Space::construct` = `check_mesh`,
+      `classify_elements` (`classify_mapped`, `classify_nodal`),
+      `group_by_kind`, `storage_fingerprint`, `tensor_weights`;
+      `Pointwise::apply_kind` = `to_points`, `point_loop`, `to_nodes`
+      (forced inline, buffers as arguments).
+    - **`space/` module** (was `space.rs`, 1264 lines; code moved, not
+      changed): `mod.rs` (types, `Space` struct, queries, `sample`),
+      `build.rs` (`SpaceBuilder`, construction, classification,
+      `point_geo`, quadrature entries), `geo.rs` (`geo_at`,
+      `map_and_jacobian`), `points.rs` (node set, quadratures, sweep tables,
+      `quadrature_*`), `mass.rs` (`local_mass`, `local_load*`,
+      `inverse_mass*`, `InverseMass`), `continuous.rs` (the numbering and
+      `c_sum_shared`, `c_multiplicity`, `c_boundary_mask`). Older entries
+      of this record still say `space.rs`. Element renumbering for locality; fusing the shared-DOF sum with
   the update; benchmarking nalgebra `SMatrix` against hand-rolled ≤3×3 algebra in
   the point kernel (geometry and push-forward), and switching if it pays.
   - Q1/Q2 geometry by sum factorization over the batch (interpolate the

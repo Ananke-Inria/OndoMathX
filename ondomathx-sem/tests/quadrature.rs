@@ -96,8 +96,8 @@ fn stored_geometry_equals_recomputed() {
             mu: Constant(1.0),
         };
         let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-        r.mlt_add::<3, _>(&k, 1.0, &u, 0.0, &mut a);
-        s.mlt_add::<3, _>(&k, 1.0, &u, 0.0, &mut b);
+        r.mlt_add::<3>(&k, 1.0, &u, 0.0, &mut a);
+        s.mlt_add::<3>(&k, 1.0, &u, 0.0, &mut b);
         assert_eq!(a, b, "q2={q2}");
         assert_eq!(r.local_mass(&Constant(1.0)), s.local_mass(&Constant(1.0)));
     }
@@ -124,6 +124,42 @@ fn node_quadrature_is_the_identity() {
         let (e, n) = (i / Space::<2, Iso2<5>>::NLOC, i % Space::<2, Iso2<5>>::NLOC);
         assert_eq!(*xi, [s[e * 50 + n], s[e * 50 + 25 + n]]);
     }
+}
+
+/// The node rule `S::Nodes` is available without being declared, with the
+/// node geometry: the same results as when declared, `mlt_add_mixed` on it is
+/// `mlt_add`, and `local_load` is `local_load_with` on it (all bitwise).
+#[test]
+fn node_rule_is_implicit() {
+    type Nodes = <Iso2<5> as lobattox::Shape<2>>::Nodes;
+    let mesh = square(3, 2, true, Some(bending_2d()));
+    let implicit = Space::<2, Iso2<5>>::new(&mesh, Numbering::None);
+    let declared = Space::<2, Iso2<5>>::builder(&mesh)
+        .quadrature::<Nodes>(GeoStorage::Store)
+        .build();
+    let u = seeded(implicit.n_dup() * 2, 3);
+    assert_eq!(implicit.quadrature_values::<Nodes, 2>(&u), u);
+    assert_eq!(
+        implicit.quadrature_weights::<Nodes>(),
+        declared.quadrature_weights::<Nodes>()
+    );
+    assert_eq!(
+        implicit.quadrature_xyz::<Nodes>(),
+        declared.quadrature_xyz::<Nodes>()
+    );
+    let f = |x: [f64; 2]| [x[0] * x[1], x[1].sin()];
+    assert_eq!(
+        implicit.local_load::<2>(f),
+        declared.local_load_with::<Nodes, 2>(f)
+    );
+    let k = IsotropicElastic {
+        lambda: Constant(2.0),
+        mu: Constant(1.0),
+    };
+    let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
+    implicit.mlt_add::<2>(&k, 1.0, &u, 0.0, &mut a);
+    implicit.mlt_add_mixed::<Nodes, 2, 2, _>(&implicit, &k, 1.0, &u, 0.0, &mut b);
+    assert_eq!(a, b);
 }
 
 /// Interpolated polynomials of degree `≤ N − 1` per direction are exact at
@@ -282,8 +318,8 @@ fn engine_on_mapped_elements() {
     };
     let u = sm.sample::<2>(|x| [x[0].sin() * x[1], x[0] * x[0] - x[1]]);
     let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    sm.mlt_add::<2, _>(&k, 1.0, &u, 0.0, &mut a);
-    sa.mlt_add::<2, _>(&k, 1.0, &u, 0.0, &mut b);
+    sm.mlt_add::<2>(&k, 1.0, &u, 0.0, &mut a);
+    sa.mlt_add::<2>(&k, 1.0, &u, 0.0, &mut b);
     let scale = b.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
     let diff = a
         .iter()

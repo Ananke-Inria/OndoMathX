@@ -29,7 +29,7 @@ fn apply<const D: usize, S: Shape<D>, const C: usize, K: PointKernel<D, C>>(
     u: &[f64],
 ) -> Vec<f64> {
     let mut v = vec![f64::NAN; u.len()];
-    space.mlt_add::<C, K>(k, 1.0, u, 0.0, &mut v);
+    space.mlt_add::<C>(k, 1.0, u, 0.0, &mut v);
     v
 }
 

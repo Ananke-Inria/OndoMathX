@@ -6,8 +6,7 @@ use common::*;
 use lobattox::fields::Constant;
 use lobattox::kernels::Mass;
 use lobattox::{
-    mlt_add_element, Batch, ElementOperator, GeoKind, GeoStorage, Gl, Iso2, Numbering, Quad2,
-    Shape, Space,
+    Batch, ElementOperator, GeoKind, GeoStorage, Gl, Iso2, Numbering, Quad2, Shape, Space,
 };
 
 fn seeded(n: usize, seed: u64) -> Vec<f64> {
@@ -53,7 +52,7 @@ fn hand_written_mass_equals_the_kernel_engine() {
     let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
     let u = seeded(space.n_dup(), 1);
     let (mut a, mut b) = (vec![0.0; u.len()], vec![0.0; u.len()]);
-    space.mlt_add::<1, _>(
+    space.mlt_add::<1>(
         &Mass {
             coef: Constant(1.7),
         },
@@ -62,15 +61,7 @@ fn hand_written_mass_equals_the_kernel_engine() {
         0.0,
         &mut a,
     );
-    mlt_add_element::<2, _, _, 1, 1, _>(
-        &space,
-        &space,
-        &NodalMass { c: 1.7 },
-        1.0,
-        &u,
-        0.0,
-        &mut b,
-    );
+    space.mlt_add_element(&space, &NodalMass { c: 1.7 }, 1.0, &u, 0.0, &mut b);
     assert_eq!(a, b);
 }
 
@@ -125,7 +116,7 @@ fn per_element_data_labels_and_update() {
     let u = seeded(space.n_dup() * 2, 2);
     let v0 = seeded(space.n_dup(), 3);
     let mut v = v0.clone();
-    mlt_add_element::<2, _, _, 2, 1, _>(&space, &space, &op, 2.0, &u, 0.5, &mut v);
+    space.mlt_add_element(&space, &op, 2.0, &u, 0.5, &mut v);
     for e in 0..space.n_elem() {
         for node in 0..n {
             let y = op.scale[e] * u[(2 * e + 1) * n + node] + space.label(e) as f64;
@@ -168,8 +159,7 @@ fn quadrature_through_the_batch() {
         .quadrature::<G>(GeoStorage::Recompute)
         .build();
     let mut v = vec![0.0; space.n_dup()];
-    mlt_add_element::<2, _, _, 1, 1, _>(
-        &space,
+    space.mlt_add_element(
         &space,
         &Area::<G>(Default::default()),
         1.0,
@@ -188,5 +178,5 @@ fn element_operator_on_different_meshes_panics() {
     let b = Space::<2, Iso2<3>>::new(&square(3, 2, false, None), Numbering::None);
     let u = vec![0.0; a.n_dup()];
     let mut v = vec![0.0; b.n_dup()];
-    mlt_add_element::<2, _, _, 1, 1, _>(&a, &b, &NodalMass { c: 1.0 }, 1.0, &u, 0.0, &mut v);
+    a.mlt_add_element(&b, &NodalMass { c: 1.0 }, 1.0, &u, 0.0, &mut v);
 }

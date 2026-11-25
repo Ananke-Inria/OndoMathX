@@ -153,21 +153,40 @@ pub enum GeoStorage {
 }
 
 /// Stored geometry of one group at the points of a set, index `k·np + p`
-/// (`k` the element index within its group).
+/// (`k` the element index within its group, `np` the number of points).
 pub(crate) struct StoredGeo<const D: usize> {
     pub(crate) x: Vec<SVector<f64, D>>,
     pub(crate) det: Vec<f64>,
     pub(crate) cof: Vec<SMatrix<f64, D, D>>,
 }
 
-/// Geometry of a set of reference points (the nodes, or a quadrature).
+impl<const D: usize> StoredGeo<D> {
+    /// `(x, det J, cof J)` at index `i = k·np + p`.
+    #[inline(always)]
+    pub(crate) fn at(&self, i: usize) -> (SVector<f64, D>, f64, SMatrix<f64, D, D>) {
+        (self.x[i], self.det[i], self.cof[i])
+    }
+}
+
+/// Geometry of the Q1 or Q2 group at the points of a set.
+pub(crate) enum GroupGeo<const D: usize> {
+    /// The shape functions tabulated at the points; the map is evaluated
+    /// from the element's nodes at each use ([`GeoStorage::Recompute`]).
+    Tabulated(GeoTab<D>),
+    /// `x`, `det J` and `cof J` at every point ([`GeoStorage::Store`]).
+    Stored(StoredGeo<D>),
+}
+
+/// Geometry of a set of reference points (the nodes, or a quadrature). A
+/// group is `None` when the space has no element of that kind; affine
+/// elements need nothing per point (one Jacobian per element).
 pub(crate) struct PointGeo<const D: usize> {
     /// Reference points in `[0, 1]^D` (trailing zeros), tensor order.
     pub(crate) ref_points: Vec<[f64; 3]>,
-    /// Q1, Q2 shape-function tables at the points (`Recompute`, non-empty group).
-    pub(crate) tabs: [Option<GeoTab<D>>; 2],
-    /// Q1, Q2 (`Store`) and Mapped (always) stored geometry.
-    pub(crate) stored: [Option<StoredGeo<D>>; 3],
+    pub(crate) q1: Option<GroupGeo<D>>,
+    pub(crate) q2: Option<GroupGeo<D>>,
+    /// Always stored (from the mesh's own map).
+    pub(crate) mapped: Option<StoredGeo<D>>,
 }
 
 /// Inverse of [`cofactor`]: `J` from `cof J` and `det J`

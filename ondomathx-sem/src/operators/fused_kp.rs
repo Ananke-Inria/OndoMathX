@@ -24,7 +24,7 @@ use crate::space::Space;
 /// - `Bᵀ`: `bᵀ(p, v) = ∫ p div v`, same quadrature `QB`.
 ///
 /// Trial and test spaces are the displacement space (`D` components):
-/// `mlt_add_element::<D, SU, SU, D, D, _>(&disp, &disp, &kp, λ, &u, 1.0, &mut y)`
+/// `disp.mlt_add_element(&disp, &kp, λ, &u, 1.0, &mut y)`
 /// adds `λ K^P u` to `y`. Same result as `mlt_add_mixed` with `Divergence`,
 /// `InverseMass::apply` of `inverse_mass_with`, `mlt_add_mixed` with
 /// `DivergenceTranspose` (to rounding).

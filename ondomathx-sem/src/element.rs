@@ -1,7 +1,7 @@
 //! Hand-written element operators: the shared driver of the matrix-free
 //! products and the hook to plug a local operator into it.
 //!
-//! [`mlt_add_element`] does the plumbing common to every operator: loop over
+//! [`Space::mlt_add_element`] does the plumbing common to every operator: loop over
 //! the geometric groups, batches of `W` elements, parallel chunks, per-task
 //! scratch, gather of `u` into lobatto's batched layout `[c][node][lane]`,
 //! scatter of `β·v + α·y`, size and same-mesh checks. An
@@ -12,8 +12,9 @@
 //! data (indexed by [`Batch::element`]), e.g. local inverse masses or
 //! boundary matrices.
 //!
-//! [`crate::mlt_add_mixed`] is the generic implementation (pointwise kernel
-//! at the points of a quadrature).
+//! [`Space::mlt_add_mixed`](crate::Space::mlt_add_mixed) (and [`Space::mlt_add`], on the node rule) is the
+//! generic implementation: a pointwise kernel at the points of a quadrature
+//! ([`crate::Pointwise`]).
 
 use nalgebra::{SMatrix, SVector};
 use rayon::prelude::*;
@@ -96,8 +97,8 @@ impl<const D: usize, SU: Shape<D>, SV: Shape<D>> Batch<'_, D, SU, SV> {
             .geo_at::<true>(set.geo, self.kind, self.element(lane), p)
     }
 
-    /// The declared quadrature `Q` of either space; panics if it is declared
-    /// on neither.
+    /// The quadrature `Q` of either space (declared, or its node rule);
+    /// panics if it is neither.
     pub fn quadrature<Q: 'static>(&self) -> PointSet<'_, D> {
         self.u_space
             .quadrature_points::<Q>()
@@ -111,7 +112,7 @@ impl<const D: usize, SU: Shape<D>, SV: Shape<D>> Batch<'_, D, SU, SV> {
     }
 }
 
-/// A local operator `v_e ← A_e u_e`, applied by [`mlt_add_element`] to
+/// A local operator `v_e ← A_e u_e`, applied by [`Space::mlt_add_element`] to
 /// batches of `W` elements: `u` holds the gathered input `[c][node][lane]`
 /// (`CU · SU::NLOC · W`), `v` receives the local result `[c][node][lane]`
 /// (`CV · SV::NLOC · W`, to be overwritten entirely).
@@ -141,13 +142,38 @@ pub trait ElementOperator<
     );
 }
 
-/// `v ← β·v + α·A·u` for the element operator `op` between `u_space` (trial,
-/// `CU` components) and `v_space` (test, `CV` components), batches of 4
-/// elements. With `β = 0`, `v` is overwritten. The output is element-local.
-///
-/// Panics if the spaces come from different meshes or on wrong lengths.
+impl<const D: usize, SU: Shape<D>> Space<D, SU> {
+    /// `v ← β·v + α·A·u` for the element operator `op` from this space
+    /// (trial, `CU` components) to `v_space` (test, `CV` components), batches
+    /// of 4 elements. With `β = 0`, `v` is overwritten. The output is
+    /// element-local. `CU` and `CV` are inferred from the operator:
+    /// `disp.mlt_add_element(&disp, &kp, λ, &u, 1.0, &mut y)`.
+    ///
+    /// Panics if the spaces come from different meshes or on wrong lengths.
+    pub fn mlt_add_element<const CU: usize, const CV: usize, SV: Shape<D>>(
+        &self,
+        v_space: &Space<D, SV>,
+        op: &impl ElementOperator<D, SU, SV, CU, CV>,
+        alpha: f64,
+        u: &[f64],
+        beta: f64,
+        v: &mut [f64],
+    ) {
+        mlt_add_element_batched::<D, SU, SV, CU, CV, _, 4>(self, v_space, op, alpha, u, beta, v);
+    }
+}
+
+/// [`Space::mlt_add_element`] with an explicit batch width `W`.
 #[allow(clippy::too_many_arguments)]
-pub fn mlt_add_element<const D: usize, SU, SV, const CU: usize, const CV: usize, Op>(
+pub(crate) fn mlt_add_element_batched<
+    const D: usize,
+    SU,
+    SV,
+    const CU: usize,
+    const CV: usize,
+    Op,
+    const W: usize,
+>(
     u_space: &Space<D, SU>,
     v_space: &Space<D, SV>,
     op: &Op,
@@ -160,7 +186,7 @@ pub fn mlt_add_element<const D: usize, SU, SV, const CU: usize, const CV: usize,
     SV: Shape<D>,
     Op: ElementOperator<D, SU, SV, CU, CV>,
 {
-    const W: usize = 4;
+    assert!(W >= 1, "batch width must be positive");
     assert_eq!(
         u_space.fingerprint, v_space.fingerprint,
         "element operator between spaces built from different meshes"
@@ -177,20 +203,26 @@ pub fn mlt_add_element<const D: usize, SU, SV, const CU: usize, const CV: usize,
         if range.is_empty() {
             continue;
         }
-        let u_group = &u[range.start * block_u..range.end * block_u];
-        let v_group = &mut v[range.start * block_v..range.end * block_v];
+        let start = range.start;
+        let u_group = &u[start * block_u..range.end * block_u];
+        let v_group = &mut v[start * block_v..range.end * block_v];
         v_group
             .par_chunks_mut(W * block_v)
             .enumerate()
             .for_each_init(
                 || (vec![0.0; CU * nuw], vec![0.0; CV * nvw], op.scratch::<W>()),
-                |(su, sy, s), (b, v_batch)| {
+                move |(su, sy, s), (b, v_batch)| {
+                    // Sizes from the constants again (not captured), so that
+                    // the gather/scatter loops have constant bounds and strides.
+                    let (nu, nv) = (SU::NLOC, SV::NLOC);
+                    let (block_u, block_v) = (CU * nu, CV * nv);
+                    let (nuw, nvw) = (nu * W, nv * W);
                     let n_valid = v_batch.len() / block_v;
                     let batch = Batch {
                         u_space,
                         v_space,
                         kind,
-                        first: range.start + b * W,
+                        first: start + b * W,
                         n_valid,
                     };
                     // Gather u; padded lanes are zero.

@@ -9,10 +9,7 @@ use common::*;
 use lobattox::fields::Constant;
 use lobattox::kernels::{Divergence, DivergenceTranspose};
 use lobattox::operators::FusedKp;
-use lobattox::{
-    mlt_add_element, mlt_add_mixed, GeoStorage, Gl, Gll, Iso2, Iso3, Numbering, Quad2, Quad3,
-    Shape, Space, Sweep,
-};
+use lobattox::{GeoStorage, Gl, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape, Space, Sweep};
 
 fn seeded(n: usize, seed: u64) -> Vec<f64> {
     let mut s = 0x9E37_79B9_7F4A_7C15_u64 ^ seed;
@@ -58,8 +55,7 @@ where
 
     // Three global operators.
     let mut p = vec![0.0; pres.n_dup()];
-    mlt_add_mixed::<QB, D, 1, D, _, _, _>(
-        &disp,
+    disp.mlt_add_mixed::<QB, D, 1, _>(
         &pres,
         &Divergence {
             coef: Constant(1.0),
@@ -70,11 +66,10 @@ where
         &mut p,
     );
     let bu = p.clone();
-    pres.inverse_mass_with::<QM, _>(&Constant(c))
+    pres.inverse_mass_with::<QM>(&Constant(c))
         .apply::<1>(&mut p);
     let mut a = y0.clone();
-    mlt_add_mixed::<QB, 1, D, D, _, _, _>(
-        &pres,
+    pres.mlt_add_mixed::<QB, 1, D, _>(
         &disp,
         &DivergenceTranspose {
             coef: Constant(1.0),
@@ -88,10 +83,10 @@ where
     // Fused.
     let kp = FusedKp::<D, SU, SP, QB, QM>::new(&disp, &pres, c);
     let mut b = y0.clone();
-    mlt_add_element::<D, _, _, D, D, _>(&disp, &disp, &kp, lambda, &u, 1.0, &mut b);
+    disp.mlt_add_element(&disp, &kp, lambda, &u, 1.0, &mut b);
 
     let mut k = vec![0.0; u.len()];
-    mlt_add_element::<D, _, _, D, D, _>(&disp, &disp, &kp, 1.0, &u, 0.0, &mut k);
+    disp.mlt_add_element(&disp, &kp, 1.0, &u, 0.0, &mut k);
     let dot = |x: &[f64], y: &[f64]| x.iter().zip(y).map(|(a, b)| a * b).sum::<f64>();
     let diff: Vec<f64> = a.iter().zip(&y0).map(|(x, y)| x - y).collect();
     let fused: Vec<f64> = b.iter().zip(&y0).map(|(x, y)| x - y).collect();

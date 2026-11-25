@@ -66,7 +66,7 @@ fn main() {
 
     // 4. The time step: 95 % of the stability limit 2 / √λ_max(M⁻¹K), with
     //    λ_max estimated by power iteration.
-    let eig = space.c_max_eigenvalue::<3, _, _>(&stiffness, &density, 5000, 1e-3);
+    let eig = space.c_max_eigenvalue::<3>(&stiffness, &density, 5000, 1e-3);
     let dt = stable_dt(eig.lambda, 0.95);
     let t_end = 1.0;
     let steps = (t_end / dt).ceil() as usize;
@@ -102,7 +102,7 @@ fn main() {
     let start = Instant::now();
     for step in 0..steps {
         let t = step as f64 * dt;
-        space.c_apply::<3, _>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
+        space.c_apply::<3>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
         inv_mass.apply::<3>(&mut ku); // M⁻¹K uⁿ
         let g = ricker(t, 0.2, 500.0);
         // uⁿ⁺¹ is written into u_prev (uⁿ⁻¹ is no longer needed), then swapped.

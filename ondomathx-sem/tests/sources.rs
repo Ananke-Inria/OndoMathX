@@ -86,7 +86,7 @@ fn forced_leapfrog() {
     for n in 1..steps {
         let t = n as f64 * dt;
         let g = 2.0 + 2.0 * PI * PI * t * t;
-        space.c_apply::<1, _>(&k, &cur, &mut y);
+        space.c_apply::<1>(&k, &cur, &mut y);
         im.apply::<1>(&mut y);
         for i in 0..s.len() {
             let next = 2.0 * cur[i] - prev[i] - dt * dt * (y[i] - g * mf[i]);

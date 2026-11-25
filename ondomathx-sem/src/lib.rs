@@ -23,11 +23,10 @@ pub mod space;
 pub mod vizir;
 pub mod vtk;
 
-pub use element::{mlt_add_element, Batch, ElementOperator, PointSet};
-pub use engine::{MixedKernel, PointIn, PointKernel, PointOut};
-pub use geometry::GeoStorage;
-pub use geometry::{cofactor, det};
-pub use mixed::{mlt_add_mixed, Pointwise};
+pub use element::{Batch, ElementOperator, PointSet};
+pub use engine::{PointIn, PointKernel, PointOut};
+pub use geometry::{cofactor, det, GeoStorage};
+pub use mixed::Pointwise;
 pub use ops::{dot, power_iteration, stable_dt, EigenEstimate};
 pub use quadrature::{Gl, Gll, Quad2, Quad3, Quadrature, Rule, Sweep};
 pub use shape::{Gll2, Gll3, Iso2, Iso3, Shape};

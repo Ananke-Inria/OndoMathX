@@ -16,11 +16,7 @@ fn dense_lambda_max<const D: usize, S: Shape<D>, const C: usize, K: PointKernel<
     k: &K,
     m_local: &[f64],
 ) -> f64 {
-    dense_lambda_max_of::<D, S, C>(
-        space,
-        |b, y| space.mlt_add::<C, K>(k, 1.0, b, 0.0, y),
-        m_local,
-    )
+    dense_lambda_max_of::<D, S, C>(space, |b, y| space.mlt_add::<C>(k, 1.0, b, 0.0, y), m_local)
 }
 
 /// Same, for any element-local operator `local(x, y)` (`y = A_loc x`, with
@@ -127,10 +123,10 @@ fn apply_and_scale_by() {
     };
     let u = space.sample::<2>(|x| [x[0] * x[1], x[1].sin()]);
     let mut expected = vec![0.0; u.len()];
-    space.mlt_add::<2, _>(&k, 1.0, &u, 0.0, &mut expected);
+    space.mlt_add::<2>(&k, 1.0, &u, 0.0, &mut expected);
     space.c_sum_shared::<2>(&mut expected);
     let mut out = vec![f64::NAN; u.len()];
-    space.c_apply::<2, _>(&k, &u, &mut out);
+    space.c_apply::<2>(&k, &u, &mut out);
     assert_eq!(out, expected);
 
     let diag: Vec<f64> = (0..space.n_dup()).map(|i| 1.0 + i as f64).collect();
@@ -155,7 +151,7 @@ fn max_eigenvalue_matches_dense() {
     let k = AcousticStiffness { rho };
     let mass = Constant(0.5);
     let exact = dense_lambda_max(&space, &k, &space.local_mass(&mass));
-    let est = space.c_max_eigenvalue::<1, _, _>(&k, &mass, 20_000, 1e-14);
+    let est = space.c_max_eigenvalue::<1>(&k, &mass, 20_000, 1e-14);
     assert!(
         est.lambda <= exact * (1.0 + 1e-12),
         "{} > {exact}",
@@ -178,7 +174,7 @@ fn max_eigenvalue_matches_dense() {
     };
     let mass = Constant(1.5);
     let exact = dense_lambda_max(&space, &k, &space.local_mass(&mass));
-    let est = space.c_max_eigenvalue::<2, _, _>(&k, &mass, 20_000, 1e-14);
+    let est = space.c_max_eigenvalue::<2>(&k, &mass, 20_000, 1e-14);
     assert!(
         (est.lambda - exact).abs() < 1e-8 * exact,
         "{} vs {exact}",
@@ -256,7 +252,7 @@ fn vtk_writer_counts() {
 #[test]
 fn power_iteration_on_a_composite_operator() {
     use lobattox::kernels::{Divergence, DivergenceTranspose};
-    use lobattox::{mlt_add_mixed, power_iteration, GeoStorage, Gl, Gll, Quad2};
+    use lobattox::{power_iteration, GeoStorage, Gl, Gll, Quad2};
     type DispRule = Quad2<Gll<4>, Gll<4>>;
     type PresMass = Quad2<Gl<2>, Gl<2>>;
     let mesh = square(2, 2, true, Some(bending_2d()));
@@ -273,7 +269,7 @@ fn power_iteration_on_a_composite_operator() {
         mu: Constant(1.0),
     };
     let rho = Constant(1.3);
-    let inv_mp = sp.inverse_mass_with::<PresMass, _>(&Constant(1.0));
+    let inv_mp = sp.inverse_mass_with::<PresMass>(&Constant(1.0));
     let div = Divergence {
         coef: Constant(1.0),
     };
@@ -282,11 +278,11 @@ fn power_iteration_on_a_composite_operator() {
     };
     // Element-local A x = R x + λ Bᵀ (M^P)⁻¹ B x.
     let local = |x: &[f64], y: &mut [f64]| {
-        su.mlt_add::<2, _>(&r, 1.0, x, 0.0, y);
+        su.mlt_add::<2>(&r, 1.0, x, 0.0, y);
         let mut p = vec![0.0; sp.n_dup()];
-        mlt_add_mixed::<DispRule, 2, 1, 2, _, _, _>(&su, &sp, &div, 1.0, x, 0.0, &mut p);
+        su.mlt_add_mixed::<DispRule, 2, 1, _>(&sp, &div, 1.0, x, 0.0, &mut p);
         inv_mp.apply::<1>(&mut p);
-        mlt_add_mixed::<DispRule, 1, 2, 2, _, _, _>(&sp, &su, &div_t, lambda, &p, 1.0, y);
+        sp.mlt_add_mixed::<DispRule, 1, 2, _>(&su, &div_t, lambda, &p, 1.0, y);
     };
     let m = su.local_mass(&rho);
     let inv_m = su.c_inverse_mass(&rho);
@@ -314,8 +310,6 @@ fn power_iteration_on_a_composite_operator() {
         est.iterations
     );
     // λ dominates: the spectrum is far above the elastic one.
-    let elastic = su
-        .c_max_eigenvalue::<2, _, _>(&r, &rho, 50_000, 1e-12)
-        .lambda;
+    let elastic = su.c_max_eigenvalue::<2>(&r, &rho, 50_000, 1e-12).lambda;
     assert!(exact > 10.0 * elastic, "{exact} vs elastic {elastic}");
 }
