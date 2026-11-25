@@ -1,0 +1,192 @@
+use criterion::{criterion_group, criterion_main, Criterion};
+use nalgebra::{DMatrix, DVector, Matrix3, SVector};
+use tetrix::finite_element::{tet_10b, tet_15, tet_15_10b};
+
+/// Build the 15×15 change-of-basis matrix M where M[i][j] = φ_j^{10b}(POINTS_15[i]).
+///
+/// `tet_10b_to_tet_15` computes  a = M  · b  (tet_10b → tet_15)
+/// `tet_15_to_tet_10b` computes  b = M⁻¹· a  (tet_15 → tet_10b, via forward substitution)
+fn build_matrix() -> DMatrix<f64> {
+    DMatrix::from_fn(15, 15, |i, j| {
+        tet_10b::shape_function(j, &tet_15::POINTS[i])
+    })
+}
+
+/// Naive tet_10b → tet_15: on-the-fly shape evaluation, no precomputed data.
+fn naive_10b_to_15(b: &[f64; 15], a: &mut [f64; 15]) {
+    for i in 0..15 {
+        let pt = &tet_15::POINTS[i];
+        a[i] = (0..15).map(|j| b[j] * tet_10b::shape_function(j, pt)).sum();
+    }
+}
+
+/// Naive tet_15 → tet_10b: on-the-fly shape evaluation + forward substitution.
+fn naive_15_to_10b(a: &[f64; 15], b: &mut [f64; 15]) {
+    let mut val = [0.0f64; 15];
+    for j in 0..15 {
+        let pt = &tet_10b::POINTS[j];
+        val[j] = (0..15).map(|i| a[i] * tet_15::shape_function(i, pt)).sum();
+    }
+    for j in 0..15 {
+        let pt = &tet_10b::POINTS[j];
+        let sub: f64 = (0..j).map(|k| b[k] * tet_10b::shape_function(k, pt)).sum();
+        b[j] = val[j] - sub;
+    }
+}
+
+fn bench_10b_to_15(c: &mut Criterion) {
+    let mat = build_matrix(); // 15×15
+
+    let b_arr = [
+        1.0, -2.0, 0.5, 3.0, -1.5, 0.7, -0.3, 2.1, -0.9, 1.3, -0.4, 0.8, -1.1, 0.6, -0.2_f64,
+    ];
+    let mut a_arr = [0.0_f64; 15];
+
+    let b_vec = DVector::from_fn(15, |i, _| b_arr[i]);
+    let mut a_vec = DVector::zeros(15);
+
+    let mut group = c.benchmark_group("tet_10b_to_tet_15  (15→15)");
+
+    group.bench_function("precomputed BUBBLE_MAT", |b| {
+        b.iter(|| {
+            tet_15_10b::tet_10b_to_tet_15(
+                std::hint::black_box(&b_arr),
+                std::hint::black_box(&mut a_arr),
+            )
+        })
+    });
+
+    group.bench_function("nalgebra  M·v", |b| {
+        b.iter(|| {
+            mat.mul_to(
+                std::hint::black_box(&b_vec),
+                std::hint::black_box(&mut a_vec),
+            )
+        })
+    });
+
+    group.bench_function("naive on-the-fly", |b| {
+        b.iter(|| {
+            naive_10b_to_15(
+                std::hint::black_box(&b_arr),
+                std::hint::black_box(&mut a_arr),
+            )
+        })
+    });
+
+    group.finish();
+}
+
+fn bench_15_to_10b(c: &mut Criterion) {
+    let a_arr = [
+        0.5, 1.2, -0.8, 2.0, -1.0, 0.3, 0.9, -0.4, 1.7, -0.6, 0.1, -1.3, 0.4, -0.7, 0.2_f64,
+    ];
+    let mut b_arr = [0.0_f64; 15];
+
+    let mut group = c.benchmark_group("tet_15_to_tet_10b  (15→15)");
+
+    group.bench_function("tet_15_to_tet_10b (P)", |b| {
+        b.iter(|| {
+            tet_15_10b::tet_15_to_tet_10b(
+                std::hint::black_box(&a_arr),
+                std::hint::black_box(&mut b_arr),
+            )
+        })
+    });
+
+    group.bench_function("tet_15_to_tet_10b_transpose (P^T)", |b| {
+        b.iter(|| {
+            tet_15_10b::tet_15_to_tet_10b_transpose(
+                std::hint::black_box(&a_arr),
+                std::hint::black_box(&mut b_arr),
+            )
+        })
+    });
+
+    group.bench_function("naive on-the-fly", |b| {
+        b.iter(|| {
+            naive_15_to_10b(
+                std::hint::black_box(&a_arr),
+                std::hint::black_box(&mut b_arr),
+            )
+        })
+    });
+
+    group.finish();
+}
+
+// Benchmark results for mlt_stiffness  (15→15)  — Apple M-series, release build:
+//
+//   tet_15  (mlt_stiffness)          126 ns
+//   tet_15  (mlt_stiffness_opt)       39 ns  ← 3.2× faster (via tet_10b basis + 2 conversions)
+//   tet_10b (mlt_stiffness)          430 ns
+//   tet_10b (mlt_stiffness_opt)       33 ns  ← 3.8× faster than tet_15::mlt_stiffness
+//   nalgebra K·v  (prebuilt 15×15)    19 ns  ← reference: prebuilt matrix-vector product
+fn bench_mlt_stiffness(c: &mut Criterion) {
+    let sym_grad = Matrix3::new(2.0, 0.5, 0.1, 0.5, 3.0, 0.2, 0.1, 0.2, 1.5);
+    let k = tet_10b::build_local_stiffness(&sym_grad);
+
+    let input: [f64; 15] = [
+        1.0, -2.0, 0.5, 3.0, -1.5, 0.7, -0.3, 2.1, -0.9, 1.3, 0.4, -0.6, 0.8, -1.2, 0.9,
+    ];
+    let mut output = [0.0_f64; 15];
+
+    let vec_in = SVector::<f64, 15>::from_fn(|i, _| input[i]);
+    let mut vec_out = SVector::<f64, 15>::zeros();
+
+    let mut group = c.benchmark_group("mlt_stiffness  (15→15)");
+
+    group.bench_function("tet_15  (mlt_stiffness)", |b| {
+        b.iter(|| {
+            tet_15::mlt_stiffness(
+                std::hint::black_box(&input),
+                std::hint::black_box(&sym_grad),
+                std::hint::black_box(&mut output),
+            )
+        })
+    });
+
+    group.bench_function("tet_15  (mlt_stiffness_opt)", |b| {
+        b.iter(|| {
+            tet_15::mlt_stiffness_opt(
+                std::hint::black_box(&input),
+                std::hint::black_box(&sym_grad),
+                std::hint::black_box(&mut output),
+            )
+        })
+    });
+
+    group.bench_function("tet_10b  (mlt_stiffness)", |b| {
+        b.iter(|| {
+            tet_10b::mlt_stiffness(
+                std::hint::black_box(&input),
+                std::hint::black_box(&sym_grad),
+                std::hint::black_box(&mut output),
+            )
+        })
+    });
+
+    group.bench_function("tet_10b  (mlt_stiffness_opt)", |b| {
+        b.iter(|| {
+            tet_10b::mlt_stiffness_opt(
+                std::hint::black_box(&input),
+                std::hint::black_box(&sym_grad),
+                std::hint::black_box(&mut output),
+            )
+        })
+    });
+
+    group.bench_function("nalgebra  K·v  (prebuilt 15×15)", |b| {
+        b.iter(|| {
+            k.mul_to(
+                std::hint::black_box(&vec_in),
+                std::hint::black_box(&mut vec_out),
+            )
+        })
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_10b_to_15, bench_15_to_10b, bench_mlt_stiffness);
+criterion_main!(benches);
