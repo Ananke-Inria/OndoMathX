@@ -3,10 +3,10 @@
 
 mod common;
 
-use anamesh::mesh::square::Square;
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::square::Square;
+use ondomathx_mesh::mesh::Mesh;
 use common::*;
-use lobattox::{Gll2, Iso2, Iso3, Numbering, Space, VizirWriter};
+use ondomathx_sem::{Gll2, Iso2, Iso3, Numbering, Space, VizirWriter};
 
 fn temp(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("lobattox-vizir-{}", std::process::id()));
@@ -64,7 +64,7 @@ fn section_count(path: &std::path::Path, section: &str) -> usize {
     lines[k + 1].trim().parse().unwrap()
 }
 
-fn check<const D: usize, S: lobattox::Shape<D>>(
+fn check<const D: usize, S: ondomathx_sem::Shape<D>>(
     space: &Space<D, S>,
     mesh: &impl Mesh,
     tag: &str,

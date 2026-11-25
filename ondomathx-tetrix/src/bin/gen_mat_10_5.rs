@@ -6,7 +6,7 @@
 ///
 /// GRADIENT_MAT[k][i] = ∂φ_i/∂x_d(q_j)   where k = j*3+d  (15 rows × 10 cols)
 
-use tetrix::finite_element::{tet_5, tet_10};
+use ondomathx_tetrix::finite_element::{tet_5, tet_10};
 
 const ZERO_THRESHOLD: f64 = 1e-15;
 

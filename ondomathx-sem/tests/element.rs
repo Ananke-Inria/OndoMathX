@@ -3,9 +3,9 @@
 mod common;
 
 use common::*;
-use lobattox::fields::Constant;
-use lobattox::kernels::Mass;
-use lobattox::{
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::Mass;
+use ondomathx_sem::{
     Batch, ElementOperator, GeoKind, GeoStorage, Gl, Iso2, Numbering, Quad2, Shape, Space,
 };
 
@@ -105,7 +105,7 @@ impl<const D: usize, S: Shape<D>> ElementOperator<D, S, S, 2, 1> for PerElement 
 #[test]
 fn per_element_data_labels_and_update() {
     let mut mesh = square(5, 3, false, Some(partial_2d()));
-    let nodes = anamesh::mesh::UnstructuredMesh::get_nodes(&mesh).to_vec();
+    let nodes = ondomathx_mesh::mesh::UnstructuredMesh::get_nodes(&mesh).to_vec();
     mesh.set_labels(|_, el| if nodes[el.indexes[0]][1] < 0.5 { 3 } else { 7 });
     let space = Space::<2, Iso2<3>>::new(&mesh, Numbering::None);
     assert!(!space.elements(GeoKind::Affine).is_empty() && !space.elements(GeoKind::Q1).is_empty());

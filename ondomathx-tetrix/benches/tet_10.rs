@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use nalgebra::{Matrix3, SVector};
-use tetrix::finite_element::tet_10::{build_local_stiffness, mlt_stiffness};
+use ondomathx_tetrix::finite_element::tet_10::{build_local_stiffness, mlt_stiffness};
 
 fn test_matrix() -> Matrix3<f64> {
     Matrix3::new(2.0, 0.5, 0.1, 0.5, 3.0, 0.2, 0.1, 0.2, 1.5)

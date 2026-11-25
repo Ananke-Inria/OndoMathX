@@ -17,11 +17,11 @@
 
 use std::time::Instant;
 
-use anamesh::mesh::square::Square;
-use anamesh::mesh::Mesh;
-use lobattox::fields::Constant;
-use lobattox::kernels::IsotropicElastic;
-use lobattox::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
+use ondomathx_mesh::mesh::square::Square;
+use ondomathx_mesh::mesh::Mesh;
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::IsotropicElastic;
+use ondomathx_sem::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
 use rayon::prelude::*;
 
 /// Ricker wavelet in time (C++ `Ricker(t, t0, s0)`).

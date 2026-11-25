@@ -1,12 +1,12 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 #[cfg(test)]
 mod tests {
-    use anamesh::dof_set::*;
-    use anamesh::geometric_elements::*;
-    use anamesh::mesh::circle::*;
-    use anamesh::mesh::square::*;
-    use anamesh::mesh::Mesh;
+    use ondomathx_mesh::dof_set::*;
+    use ondomathx_mesh::geometric_elements::*;
+    use ondomathx_mesh::mesh::circle::*;
+    use ondomathx_mesh::mesh::square::*;
+    use ondomathx_mesh::mesh::Mesh;
 
     fn mid(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
         [

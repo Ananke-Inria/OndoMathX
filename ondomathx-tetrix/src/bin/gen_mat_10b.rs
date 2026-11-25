@@ -10,7 +10,7 @@
 /// Runs with:
 ///   cargo run --bin gen_mat_10b
 
-use tetrix::finite_element::{tet_10b, tet_14};
+use ondomathx_tetrix::finite_element::{tet_10b, tet_14};
 
 const ZERO_THRESHOLD: f64 = 1e-15;
 

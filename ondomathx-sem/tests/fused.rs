@@ -3,13 +3,13 @@
 
 mod common;
 
-use anamesh::mesh::square::Square;
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::square::Square;
+use ondomathx_mesh::mesh::Mesh;
 use common::*;
-use lobattox::fields::Constant;
-use lobattox::kernels::{Divergence, DivergenceTranspose};
-use lobattox::operators::FusedKp;
-use lobattox::{GeoStorage, Gl, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape, Space, Sweep};
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::{Divergence, DivergenceTranspose};
+use ondomathx_sem::operators::FusedKp;
+use ondomathx_sem::{GeoStorage, Gl, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape, Space, Sweep};
 
 fn seeded(n: usize, seed: u64) -> Vec<f64> {
     let mut s = 0x9E37_79B9_7F4A_7C15_u64 ^ seed;

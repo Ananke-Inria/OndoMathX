@@ -4,9 +4,9 @@
 mod common;
 
 use common::*;
-use lobattox::fields::{Constant, PerLabel};
-use lobattox::kernels::{IsotropicElastic, Mass};
-use lobattox::{Iso2, Iso3, Numbering, Space};
+use ondomathx_sem::fields::{Constant, PerLabel};
+use ondomathx_sem::kernels::{IsotropicElastic, Mass};
+use ondomathx_sem::{Iso2, Iso3, Numbering, Space};
 
 fn seeded(n: usize, seed: u64) -> Vec<f64> {
     let mut s = 0x9E37_79B9_7F4A_7C15_u64 ^ seed;

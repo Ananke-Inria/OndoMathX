@@ -1,10 +1,10 @@
 //! Meshes and deformations shared by the integration tests.
 #![allow(dead_code)]
 
-use anamesh::diffeomorphism::Diffeomorphism;
-use anamesh::mesh::cube::Cube;
-use anamesh::mesh::square::Square;
-use anamesh::mesh::{Mesh, UnstructuredMesh};
+use ondomathx_mesh::diffeomorphism::Diffeomorphism;
+use ondomathx_mesh::mesh::cube::Cube;
+use ondomathx_mesh::mesh::square::Square;
+use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
 
 /// f(x, y) = (x + 0.1·sin(y) + 0.05·xy, y + 0.2·x²): curved, non-affine.
 /// The coupled `xy` term matters: a separable map (x-shift depending on y

@@ -3,17 +3,17 @@
 
 mod common;
 
-use anamesh::mesh::square::Square;
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::square::Square;
+use ondomathx_mesh::mesh::Mesh;
 use common::*;
 use lobatto::collocation::Gauss;
 use lobatto::tables::{derivative_matrix_dyn, interpolation_row, points_weights_dyn};
 use lobatto::utilities::barycentric_weights;
-use lobattox::fields::Constant;
-use lobattox::kernels::{
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::{
     AcousticStiffness, Divergence, DivergenceTranspose, IsotropicElastic, Mass,
 };
-use lobattox::{
+use ondomathx_sem::{
     cofactor, det, GeoStorage, Gl, Gll, Gll2, Iso2, Iso3, Numbering, PointIn, PointKernel,
     PointOut, Quad2, Quad3, Quadrature, Shape, Space,
 };
@@ -182,7 +182,7 @@ fn reference<
 
 fn check_vs_reference<const D: usize, SU: Shape<D>, SV: Shape<D>, Q>(mesh: &impl Mesh, what: &str)
 where
-    Q: lobattox::Sweep<D, SU> + lobattox::Sweep<D, SV>,
+    Q: ondomathx_sem::Sweep<D, SU> + ondomathx_sem::Sweep<D, SV>,
 {
     let su = Space::<D, SU>::builder(mesh)
         .quadrature::<Q>(GeoStorage::Recompute)

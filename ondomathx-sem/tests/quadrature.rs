@@ -4,14 +4,14 @@
 
 mod common;
 
-use anamesh::mesh::circle::Circle;
-use anamesh::mesh::cube::Cube;
-use anamesh::mesh::square::Square;
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::circle::Circle;
+use ondomathx_mesh::mesh::cube::Cube;
+use ondomathx_mesh::mesh::square::Square;
+use ondomathx_mesh::mesh::Mesh;
 use common::*;
-use lobattox::fields::Constant;
-use lobattox::kernels::IsotropicElastic;
-use lobattox::{GeoKind, GeoStorage, Gl, Gll, Gll3, Iso2, Iso3, Numbering, Quad2, Quad3, Space};
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::IsotropicElastic;
+use ondomathx_sem::{GeoKind, GeoStorage, Gl, Gll, Gll3, Iso2, Iso3, Numbering, Quad2, Quad3, Space};
 
 fn seeded(n: usize, seed: u64) -> Vec<f64> {
     let mut s = 0x9E37_79B9_7F4A_7C15_u64 ^ seed;
@@ -29,7 +29,7 @@ fn integrate<const D: usize>(w: &[f64], x: &[[f64; D]], f: impl Fn([f64; D]) -> 
     w.iter().zip(x).map(|(w, x)| w * f(*x)).sum()
 }
 
-fn kinds<const D: usize, S: lobattox::Shape<D>>(space: &Space<D, S>) -> [usize; 4] {
+fn kinds<const D: usize, S: ondomathx_sem::Shape<D>>(space: &Space<D, S>) -> [usize; 4] {
     GeoKind::ALL.map(|k| space.elements(k).len())
 }
 
@@ -131,7 +131,7 @@ fn node_quadrature_is_the_identity() {
 /// `mlt_add`, and `local_load` is `local_load_with` on it (all bitwise).
 #[test]
 fn node_rule_is_implicit() {
-    type Nodes = <Iso2<5> as lobattox::Shape<2>>::Nodes;
+    type Nodes = <Iso2<5> as ondomathx_sem::Shape<2>>::Nodes;
     let mesh = square(3, 2, true, Some(bending_2d()));
     let implicit = Space::<2, Iso2<5>>::new(&mesh, Numbering::None);
     let declared = Space::<2, Iso2<5>>::builder(&mesh)
@@ -254,7 +254,7 @@ fn circle_exact_geometry() {
 fn deformed_square_is_mapped() {
     type Q = Quad2<Gl<5>, Gl<3>>;
     let sq = Square::new([0.0, 0.0], 2.0, 1.0, 4, 2, Some(bending_2d()), None);
-    let space = Space::<2, lobattox::Gll2<5, 3>>::builder(&sq)
+    let space = Space::<2, ondomathx_sem::Gll2<5, 3>>::builder(&sq)
         .numbering(Numbering::Continuous)
         .quadrature::<Q>(GeoStorage::Recompute)
         .build();

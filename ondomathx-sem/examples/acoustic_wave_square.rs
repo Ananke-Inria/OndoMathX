@@ -19,11 +19,11 @@
 use std::f64::consts::PI;
 use std::time::Instant;
 
-use anamesh::mesh::square::Square;
-use anamesh::mesh::Mesh;
-use lobattox::fields::Constant;
-use lobattox::kernels::AnisotropicAcoustic;
-use lobattox::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
+use ondomathx_mesh::mesh::square::Square;
+use ondomathx_mesh::mesh::Mesh;
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::AnisotropicAcoustic;
+use ondomathx_sem::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
 use rayon::prelude::*;
 
 /// Gaussian (C++ `Gaussian(t, t0, s0)`).

@@ -26,7 +26,7 @@ use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::Mesh;
 use rayon::prelude::*;
 
 use crate::shape::Shape;

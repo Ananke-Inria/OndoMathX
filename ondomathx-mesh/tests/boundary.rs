@@ -1,13 +1,13 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 //Validation of UnstructuredMesh::get_parent_face and get_boundary_faces:
 //the parent volume element of a boundary element and the local facet (edge
 //in 2D, face in 3D) it occupies, and the topological boundary.
 #[cfg(test)]
 mod tests {
-    use anamesh::mesh::cube::Cube;
-    use anamesh::mesh::square::Square;
-    use anamesh::mesh::{Mesh, UnstructuredMesh};
+    use ondomathx_mesh::mesh::cube::Cube;
+    use ondomathx_mesh::mesh::square::Square;
+    use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
 
     //The boundary element and the parent's local facet are the same edge
     //(2D) or face (3D): Edge/Face compare by their sorted vertex indices.

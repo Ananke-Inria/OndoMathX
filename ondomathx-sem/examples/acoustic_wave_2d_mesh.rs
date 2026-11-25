@@ -11,17 +11,17 @@
 //! ```text
 //! cargo run --release --example acoustic_wave_2d_mesh [-- path/to/mesh.msh]
 //! ```
-//! The default mesh is Anamesh's asset `Potatoe.msh`. Output in
+//! The default mesh is ondomathx-mesh's asset `Potatoe.msh`. Output in
 //! `out/acoustic_wave_2d_mesh/` (git-ignored): the mesh for Vizir (`.mesh`),
 //! and every 0.1 time unit a snapshot for ParaView (`.vtk`) and for Vizir
 //! (`.sol`).
 
 use std::time::Instant;
 
-use anamesh::mesh::{Mesh, UnstructuredMesh};
-use lobattox::fields::Constant;
-use lobattox::kernels::AnisotropicAcoustic;
-use lobattox::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
+use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::AnisotropicAcoustic;
+use ondomathx_sem::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
 use rayon::prelude::*;
 
 /// Ricker wavelet in time (C++ `Ricker(t, t0, s0)`).
@@ -45,7 +45,7 @@ fn main() {
     // 1. The mesh: read from a Gmsh file (Anamesh). The space uses its
     //    quadrangles; the labelled boundary edges are not needed here.
     let file = std::env::args().nth(1).unwrap_or_else(|| {
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../Anamesh/assets/Potatoe.msh").to_string()
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../ondomathx-mesh/assets/Potatoe.msh").to_string()
     });
     let mesh = UnstructuredMesh::new_from_msh(&file).unwrap_or_else(|e| panic!("{file}: {e}"));
 

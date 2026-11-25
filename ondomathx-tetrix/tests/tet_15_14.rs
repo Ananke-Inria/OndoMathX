@@ -1,7 +1,7 @@
 use nalgebra::{DMatrix, DVector};
-use tetrix::finite_element::tet_14;
-use tetrix::finite_element::tet_15::d_shape_function;
-use tetrix::finite_element::tet_15_14::{gradient_interpolation, transpose_gradient_interpolation};
+use ondomathx_tetrix::finite_element::tet_14;
+use ondomathx_tetrix::finite_element::tet_15::d_shape_function;
+use ondomathx_tetrix::finite_element::tet_15_14::{gradient_interpolation, transpose_gradient_interpolation};
 
 // The precomputed coefficients in tet_15_14 have ~10 significant digits,
 // so floating-point agreement up to 1e-8 is expected.

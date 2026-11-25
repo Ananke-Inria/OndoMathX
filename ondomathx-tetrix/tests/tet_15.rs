@@ -1,5 +1,5 @@
 use nalgebra::Matrix3;
-use tetrix::finite_element::tet_15::{
+use ondomathx_tetrix::finite_element::tet_15::{
     build_local_stiffness, d_shape_function, mlt_stiffness, mlt_stiffness_opt, shape_function,
     POINTS, WEIGHTS,
 };

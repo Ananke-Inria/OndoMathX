@@ -1,4 +1,4 @@
-# Anamesh
+# ondomathx-mesh (formerly Anamesh)
 
 Rust library for **finite element mesh handling**: from a mesh file or a parametric
 description down to a global DOF numbering ready for FE assembly. Covers reference
@@ -6,8 +6,12 @@ elements, geometric elements + shape functions, mesh I/O, topology, smooth defor
 of meshes through diffeomorphisms, graph coloring for parallelism, and conforming DOF
 numbering.
 
-Part of the **OndoMathX** workspace (siblings: `LobattoX`, `QuadratiX`, `TetriX`).
-Anamesh is its own git repository — commit here, not from the workspace root.
+Crate `ondomathx-mesh` of the **OndoMathX** workspace (repository
+`Ananke-Inria/OndoMathX`; siblings `ondomathx-sem`, formerly LobattoX,
+`ondomathx-tetrix`, formerly TetriX, and `ondomathx-toolbox`). Until 2026-11-25
+it was the separate repository Anamesh; its history was imported here. Commit
+from the workspace root. Older entries below keep the old names (Anamesh,
+LobattoX, TetriX, QuadratiX).
 `README.md` is user-facing only; this file holds everything for development:
 conventions, contracts, design decisions, and open work.
 

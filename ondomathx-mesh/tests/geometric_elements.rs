@@ -1,8 +1,8 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 #[cfg(test)]
 mod tests {
-    use anamesh::geometric_elements::*;
+    use ondomathx_mesh::geometric_elements::*;
 
     // === EDGE2: linear edge shape functions ===
 

@@ -1,7 +1,9 @@
 [package]
-name = "tetrix"
+name = "ondomathx-tetrix"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "TetriX"
@@ -50,7 +52,7 @@ name = "tetrix_p2_space"
 harness = false
 
 [dependencies]
-anamesh = { path = "../Anamesh" }
+ondomathx-mesh = { path = "../ondomathx-mesh", version = "0.1.0" }
 nalgebra = "0.33"
 rayon = "1"
 sprs = "0.11"

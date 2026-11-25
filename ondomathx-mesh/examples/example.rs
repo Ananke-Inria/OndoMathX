@@ -1,6 +1,6 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
-use anamesh::mesh::*;
+use ondomathx_mesh::mesh::*;
 use unstructured_mesh::UnstructuredMesh;
 
 fn main() {

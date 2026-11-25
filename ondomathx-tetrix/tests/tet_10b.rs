@@ -1,9 +1,9 @@
 use nalgebra::Matrix3;
-use tetrix::finite_element::tet_10b::{
+use ondomathx_tetrix::finite_element::tet_10b::{
     build_local_stiffness, d_shape_function, mlt_stiffness, mlt_stiffness_opt, shape_function,
     BUBBLE_GRAD_NORM_SQ, POINTS,
 };
-use tetrix::finite_element::{tet_14};
+use ondomathx_tetrix::finite_element::{tet_14};
 
 const TOL: f64 = 1e-12;
 const TOL_K: f64 = 1e-12;

@@ -1,8 +1,8 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 #[cfg(test)]
 mod tests {
-    use anamesh::topology::*;
+    use ondomathx_mesh::topology::*;
 
     // === Edge ===
 

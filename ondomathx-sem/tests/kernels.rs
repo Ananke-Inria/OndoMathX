@@ -1,10 +1,10 @@
 mod common;
 
-use anamesh::mesh::UnstructuredMesh;
+use ondomathx_mesh::mesh::UnstructuredMesh;
 use common::*;
-use lobattox::fields::{Constant, Field, Function, Inverse, PerLabel, PointData};
-use lobattox::kernels::{AcousticStiffness, IsotropicElastic, Mass};
-use lobattox::{Iso2, Iso3, Numbering, PointKernel, Shape, Space};
+use ondomathx_sem::fields::{Constant, Field, Function, Inverse, PerLabel, PointData};
+use ondomathx_sem::kernels::{AcousticStiffness, IsotropicElastic, Mass};
+use ondomathx_sem::{Iso2, Iso3, Numbering, PointKernel, Shape, Space};
 
 // ── Helpers ────────────────────────────────────────────────────────────
 

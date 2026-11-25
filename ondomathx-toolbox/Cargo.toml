@@ -1,0 +1,14 @@
+[package]
+name = "ondomathx-toolbox"
+version = "0.1.0"
+description = "Shared tools of the OndoMathX crates."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# Tools that need meshes (test meshes, I/O on a mesh).
+mesh = ["dep:ondomathx-mesh"]
+
+[dependencies]
+ondomathx-mesh = { path = "../ondomathx-mesh", version = "0.1.0", optional = true }

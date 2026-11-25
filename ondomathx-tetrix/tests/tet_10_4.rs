@@ -1,7 +1,7 @@
 use nalgebra::{DMatrix, DVector};
-use tetrix::finite_element::tet_4;
-use tetrix::finite_element::tet_10::d_shape_function;
-use tetrix::finite_element::tet_10_4::{gradient_interpolation, transpose_gradient_interpolation};
+use ondomathx_tetrix::finite_element::tet_4;
+use ondomathx_tetrix::finite_element::tet_10::d_shape_function;
+use ondomathx_tetrix::finite_element::tet_10_4::{gradient_interpolation, transpose_gradient_interpolation};
 
 const TOL: f64 = 1e-14;
 

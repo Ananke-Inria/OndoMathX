@@ -6,9 +6,9 @@ mod common;
 use std::f64::consts::PI;
 
 use common::*;
-use lobattox::fields::Constant;
-use lobattox::kernels::AcousticStiffness;
-use lobattox::{GeoStorage, Gl, Iso2, Numbering, Quad2, Space};
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::AcousticStiffness;
+use ondomathx_sem::{GeoStorage, Gl, Iso2, Numbering, Quad2, Space};
 
 fn max_rel(a: &[f64], b: &[f64]) -> f64 {
     let scale = b.iter().fold(1e-300_f64, |m, v| m.max(v.abs()));
@@ -41,7 +41,7 @@ fn lumped_load_is_nodal() {
 #[test]
 fn quadrature_load_integrates() {
     type G = Quad2<Gl<5>, Gl<5>>;
-    type Nodes = Quad2<lobattox::Gll<3>, lobattox::Gll<3>>;
+    type Nodes = Quad2<ondomathx_sem::Gll<3>, ondomathx_sem::Gll<3>>;
     let mesh = square(4, 2, false, None); // [0, 2] × [0, 1]
     let space = Space::<2, Iso2<3>>::builder(&mesh)
         .quadrature::<G>(GeoStorage::Recompute)

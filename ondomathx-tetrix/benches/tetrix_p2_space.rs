@@ -1,12 +1,12 @@
-use anamesh::mesh::UnstructuredMesh;
+use ondomathx_mesh::mesh::UnstructuredMesh;
 use criterion::{criterion_group, criterion_main, Criterion};
 use nalgebra::DVector;
 use nalgebra_sparse::CsrMatrix;
 use sprs::prod::mul_acc_mat_vec_csr;
-use tetrix::tetrix_p2_space::TetriXP2Space;
+use ondomathx_tetrix::tetrix_p2_space::TetriXP2Space;
 
 fn setup() -> (UnstructuredMesh,) {
-    let mesh = UnstructuredMesh::new_from_mesh("../Rouage/assets/Heart.mesh")
+    let mesh = UnstructuredMesh::new_from_mesh(concat!(env!("CARGO_MANIFEST_DIR"), "/../ondomathx-mesh/assets/Heart.mesh"))
         .expect("Failed to load Heart.mesh");
     (mesh,)
 }

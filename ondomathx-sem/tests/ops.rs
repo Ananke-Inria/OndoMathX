@@ -1,9 +1,9 @@
 mod common;
 
 use common::*;
-use lobattox::fields::{Constant, PerLabel};
-use lobattox::kernels::{AcousticStiffness, IsotropicElastic};
-use lobattox::{
+use ondomathx_sem::fields::{Constant, PerLabel};
+use ondomathx_sem::kernels::{AcousticStiffness, IsotropicElastic};
+use ondomathx_sem::{
     dot, stable_dt, Iso2, Iso3, Numbering, PointKernel, Shape, Space, VtkField, VtkWriter,
 };
 use nalgebra::DMatrix;
@@ -251,8 +251,8 @@ fn vtk_writer_counts() {
 /// rule, λ = 1e3) through the closure power iteration, against a dense solve.
 #[test]
 fn power_iteration_on_a_composite_operator() {
-    use lobattox::kernels::{Divergence, DivergenceTranspose};
-    use lobattox::{power_iteration, GeoStorage, Gl, Gll, Quad2};
+    use ondomathx_sem::kernels::{Divergence, DivergenceTranspose};
+    use ondomathx_sem::{power_iteration, GeoStorage, Gl, Gll, Quad2};
     type DispRule = Quad2<Gll<4>, Gll<4>>;
     type PresMass = Quad2<Gl<2>, Gl<2>>;
     let mesh = square(2, 2, true, Some(bending_2d()));

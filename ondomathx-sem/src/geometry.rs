@@ -7,7 +7,7 @@
 //! (`GeometricElement::tabulate`) at a fixed point set, columns in tensor
 //! order. No shape function is written here.
 
-use anamesh::geometric_elements::GeometricElement;
+use ondomathx_mesh::geometric_elements::GeometricElement;
 use nalgebra::{SMatrix, SVector};
 
 /// Tolerance of the affine / Q1 detection, in reference coordinates.

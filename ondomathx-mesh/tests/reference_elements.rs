@@ -1,8 +1,8 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 #[cfg(test)]
 mod tests {
-    use anamesh::reference_elements::*;
+    use ondomathx_mesh::reference_elements::*;
 
     // === Topology counts ===
 

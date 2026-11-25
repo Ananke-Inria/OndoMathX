@@ -10,7 +10,7 @@
 ///   gradient_interpolation:           output[k] = Σ_i GRADIENT_MAT[k][i] * input[i]
 ///   transpose_gradient_interpolation: output[i] += GRADIENT_MAT[k][i] * input[k]  (axpy)
 
-use tetrix::finite_element::{tet_14, tet_15};
+use ondomathx_tetrix::finite_element::{tet_14, tet_15};
 
 /// Snap values below this threshold to exactly 0.0 to eliminate floating-point
 /// noise from entries that are mathematically zero.

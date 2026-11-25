@@ -1,14 +1,14 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 //Validation of the get_element_grad_def contract: grad_def is overwritten
 //with the Jacobian of the COMPLETE element map (undeformed map composed
 //with any attached deformation), row-major, shape geo_dim × elem_dim.
 #[cfg(test)]
 mod tests {
-    use anamesh::diffeomorphism::Diffeomorphism;
-    use anamesh::mesh::circle::Circle;
-    use anamesh::mesh::square::Square;
-    use anamesh::mesh::Mesh;
+    use ondomathx_mesh::diffeomorphism::Diffeomorphism;
+    use ondomathx_mesh::mesh::circle::Circle;
+    use ondomathx_mesh::mesh::square::Square;
+    use ondomathx_mesh::mesh::Mesh;
 
     //Nonlinear deformation with a smooth known Jacobian:
     //f(x, y) = (x + 0.1·sin(y), y + 0.2·x²), Df = [[1, 0.1·cos y], [0.4·x, 1]]
@@ -255,7 +255,7 @@ mod tests {
 
     // === get_element_def: the map differentiated by get_element_grad_def ===
 
-    use anamesh::mesh::cube::Cube;
+    use ondomathx_mesh::mesh::cube::Cube;
 
     //3D map with a smooth known Jacobian.
     fn twist_3d() -> Diffeomorphism {

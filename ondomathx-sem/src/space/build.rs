@@ -6,8 +6,8 @@ use std::any::{type_name, Any, TypeId};
 use std::marker::PhantomData;
 use std::ops::Range;
 
-use anamesh::geometric_elements::GeometricElement;
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::geometric_elements::GeometricElement;
+use ondomathx_mesh::mesh::Mesh;
 use lobatto::tables::points_weights_dyn;
 use nalgebra::{SMatrix, SVector};
 
@@ -135,12 +135,12 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     fn geometric_elements() -> [(&'static GeometricElement, Vec<usize>); 2] {
         let (q1, q2) = match D {
             2 => (
-                &anamesh::geometric_elements::QUADRANGLE4,
-                &anamesh::geometric_elements::QUADRANGLE9,
+                &ondomathx_mesh::geometric_elements::QUADRANGLE4,
+                &ondomathx_mesh::geometric_elements::QUADRANGLE9,
             ),
             _ => (
-                &anamesh::geometric_elements::HEXAHEDRON8,
-                &anamesh::geometric_elements::HEXAHEDRON27,
+                &ondomathx_mesh::geometric_elements::HEXAHEDRON8,
+                &ondomathx_mesh::geometric_elements::HEXAHEDRON27,
             ),
         };
         [

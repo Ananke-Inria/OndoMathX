@@ -1,11 +1,11 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 #[cfg(test)]
 mod tests {
-    use anamesh::diffeomorphism::*;
-    use anamesh::geometric_elements::*;
-    use anamesh::mesh::square::*;
-    use anamesh::mesh::Mesh;
+    use ondomathx_mesh::diffeomorphism::*;
+    use ondomathx_mesh::geometric_elements::*;
+    use ondomathx_mesh::mesh::square::*;
+    use ondomathx_mesh::mesh::Mesh;
 
     // === Construction ===
 

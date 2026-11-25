@@ -1,4 +1,4 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 //Validation of Mesh::get_tensor_numbering: a continuous numbering of a
 //tensor DoF layout (n[d] DoFs per direction, local index x-fastest) on the
@@ -6,10 +6,10 @@ extern crate anamesh;
 //the same physical point, distinct DoFs at distinct points.
 #[cfg(test)]
 mod tests {
-    use anamesh::mesh::circle::Circle;
-    use anamesh::mesh::cube::Cube;
-    use anamesh::mesh::square::Square;
-    use anamesh::mesh::{DoFSet, Mesh};
+    use ondomathx_mesh::mesh::circle::Circle;
+    use ondomathx_mesh::mesh::cube::Cube;
+    use ondomathx_mesh::mesh::square::Square;
+    use ondomathx_mesh::mesh::{DoFSet, Mesh};
 
     //Tensor reference points (equispaced, x fastest) of a layout n.
     fn tensor_points(n: [usize; 3], dim: usize) -> Vec<[f64; 3]> {

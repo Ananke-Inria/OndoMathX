@@ -1,7 +1,7 @@
 //! The continuous numbering: its construction (shared-DOF groups) and the
 //! `c_` functions that use it (except `c_inverse_mass`, in `mass`).
 
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::Mesh;
 use rayon::prelude::*;
 
 use crate::shape::Shape;

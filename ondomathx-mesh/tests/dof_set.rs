@@ -1,9 +1,9 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 #[cfg(test)]
 mod tests {
-    use anamesh::dof_set::*;
-    use anamesh::reference_elements::*;
+    use ondomathx_mesh::dof_set::*;
+    use ondomathx_mesh::reference_elements::*;
 
     #[test]
     fn dof_set_edge_p1() {

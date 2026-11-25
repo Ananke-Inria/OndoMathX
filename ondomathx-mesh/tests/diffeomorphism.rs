@@ -1,11 +1,11 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 //grad_diffeo contract: WRITE the Jacobian Df(xyz), row-major
 //outer_dim × inner_dim (never read the previous content of the buffer);
 //chain-rule products are performed by the library in grad_eval.
 #[cfg(test)]
 mod tests {
-    use anamesh::diffeomorphism::*;
+    use ondomathx_mesh::diffeomorphism::*;
 
     #[test]
     fn identity_deformation() {

@@ -1,9 +1,9 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 #[cfg(test)]
 mod tests {
-    use anamesh::mesh::square::*;
-    use anamesh::mesh::Mesh;
+    use ondomathx_mesh::mesh::square::*;
+    use ondomathx_mesh::mesh::Mesh;
 
     #[test]
     fn coloring_algorithm() {

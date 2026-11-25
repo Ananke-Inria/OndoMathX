@@ -1,10 +1,10 @@
 mod common;
 
-use anamesh::mesh::square::Square;
-use anamesh::mesh::{Mesh, UnstructuredMesh};
+use ondomathx_mesh::mesh::square::Square;
+use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
 use common::*;
-use lobattox::fields::Constant;
-use lobattox::{GeoKind, Gll2, Gll3, Iso2, Iso3, Numbering, Shape, Space};
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::{GeoKind, Gll2, Gll3, Iso2, Iso3, Numbering, Shape, Space};
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -261,15 +261,15 @@ fn check_cofactor<const D: usize>() -> (f64, nalgebra::SMatrix<f64, D, D>) {
     let m = nalgebra::SMatrix::<f64, D, D>::from_fn(|a, b| {
         ((3 * a + 7 * b + 1) as f64).sin() + if a == b { 2.0 } else { 0.0 }
     });
-    let d = lobattox::det(&m);
-    let should_be_identity = m * lobattox::cofactor(&m).transpose() / d;
+    let d = ondomathx_sem::det(&m);
+    let should_be_identity = m * ondomathx_sem::cofactor(&m).transpose() / d;
     assert!((should_be_identity - nalgebra::SMatrix::<f64, D, D>::identity()).amax() < 1e-14);
     (d, m)
 }
 
 #[test]
 fn cofactor_and_det() {
-    // nalgebra's determinant needs concrete sizes (see `lobattox::cofactor`).
+    // nalgebra's determinant needs concrete sizes (see `ondomathx_sem::cofactor`).
     let (d2, m2) = check_cofactor::<2>();
     assert!((d2 - m2.determinant()).abs() < 1e-14);
     let (d3, m3) = check_cofactor::<3>();
@@ -334,7 +334,7 @@ fn anisotropic_continuous_on_square_and_cube() {
     assert_eq!(space.c_n_global(), (4 * 2 + 1) * (3 * 4 + 1));
     check_continuity(&space, |x| [x[0].sin() + x[1], x[0] * x[1]]);
     assert!((distinct_nodes(&multiplicity(&space)) - space.c_n_global() as f64).abs() < 1e-9);
-    let cube = anamesh::mesh::cube::Cube::new([0.0; 3], 1.0, 2.0, 1.0, 2, 3, 2, None, None);
+    let cube = ondomathx_mesh::mesh::cube::Cube::new([0.0; 3], 1.0, 2.0, 1.0, 2, 3, 2, None, None);
     let space = Space::<3, Gll3<2, 4, 3>>::new(&cube, Numbering::Continuous);
     assert_eq!(space.c_n_global(), (2 + 1) * (3 * 3 + 1) * (2 * 2 + 1));
     check_continuity(&space, |x| [x[0] * x[2] + x[1], x[0] - x[1] * x[2]]);

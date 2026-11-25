@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use nalgebra::{DMatrix, DVector};
-use tetrix::finite_element::{tet_5, tet_10, tet_10_5};
+use ondomathx_tetrix::finite_element::{tet_5, tet_10, tet_10_5};
 
 // Benchmark results (Apple M-series, release build):
 //

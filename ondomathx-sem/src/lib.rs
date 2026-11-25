@@ -6,7 +6,7 @@
 //! stepping for wave problems (acoustics, elastodynamics); the time loops
 //! themselves live in the examples.
 //!
-//! Meshes come from [`anamesh`]; 1D GLL data and the batched sum-factorized
+//! Meshes come from [`ondomathx_mesh`]; 1D GLL data and the batched sum-factorized
 //! derivative kernels come from [`lobatto`].
 
 pub mod element;

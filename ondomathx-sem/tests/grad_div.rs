@@ -5,10 +5,10 @@
 
 mod common;
 
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::Mesh;
 use common::*;
-use lobattox::operators::{FusedKp, FusedKpQ4Q2, PressureMass2, PressureMass3};
-use lobattox::{
+use ondomathx_sem::operators::{FusedKp, FusedKpQ4Q2, PressureMass2, PressureMass3};
+use ondomathx_sem::{
     ElementOperator, GeoStorage, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape, Space,
 };
 
@@ -126,8 +126,8 @@ fn green_and_quadrature_options_agree_on_q1_meshes_3d() {
 }
 
 /// Non-separable 3D map (non-polynomial in every reference direction).
-fn twist_3d() -> anamesh::diffeomorphism::Diffeomorphism {
-    anamesh::diffeomorphism::Diffeomorphism {
+fn twist_3d() -> ondomathx_mesh::diffeomorphism::Diffeomorphism {
+    ondomathx_mesh::diffeomorphism::Diffeomorphism {
         inner_dim: 3,
         outer_dim: 3,
         params: vec![],
@@ -166,10 +166,10 @@ fn twist_3d() -> anamesh::diffeomorphism::Diffeomorphism {
 fn options_on_curved_and_mapped_elements() {
     let q2 = options_2d(&square(3, 2, true, Some(bending_2d())), 1.0);
     let q2_3d = options_3d(&cube([2, 1, 2], true, Some(bending_3d())));
-    let circle = anamesh::mesh::circle::Circle::new([0.3, -0.2], 1.5, 7, None, None);
+    let circle = ondomathx_mesh::mesh::circle::Circle::new([0.3, -0.2], 1.5, 7, None, None);
     let mapped = options_2d(&circle, 1.0);
     let cb =
-        anamesh::mesh::cube::Cube::new([0.0; 3], 1.0, 2.0, 1.5, 2, 1, 2, Some(twist_3d()), None);
+        ondomathx_mesh::mesh::cube::Cube::new([0.0; 3], 1.0, 2.0, 1.5, 2, 1, 2, Some(twist_3d()), None);
     let mapped_3d = options_3d(&cb);
     println!("option 3 vs option 2: Q2 2D {q2:e}, Q2 3D {q2_3d:e}, Circle {mapped:e}, twisted cube {mapped_3d:e}");
     assert!(q2 < 1e-12 && q2_3d < 1e-12, "Q2: {q2:e}, {q2_3d:e}");

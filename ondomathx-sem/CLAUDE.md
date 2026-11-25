@@ -1,4 +1,4 @@
-# LobattoX
+# ondomathx-sem (formerly LobattoX)
 
 Rust library for **matrix-free spectral elements on quadrangle and hexahedron
 meshes**: Gauss–Lobatto (GLL) Lagrange elements of arbitrary order, operator
@@ -7,12 +7,15 @@ application without assembly, and explicit time stepping for wave problems
 LobattoX module (`Sources/FEM/LobattoX`, operator engine
 `Operators/Core/AbstractMltAdd.h`), with TetriX's storage and threading model.
 
-Part of the **OndoMathX** workspace. Dependencies:
-- `Anamesh` (`../Anamesh`): meshes, geometric maps, labels, DOF numbering.
-- `lobatto` (crates.io, `0.1.4`; source in `../QuadratiX/lobatto`): all 1D
+Crate `ondomathx-sem` of the **OndoMathX** workspace (repository
+`Ananke-Inria/OndoMathX`). Dependencies:
+- `ondomathx-mesh` (`../ondomathx-mesh`, formerly Anamesh): meshes, geometric maps, labels, DOF numbering.
+- `lobatto` (crates.io, `0.1.4`; source in the Lobatto repository, formerly QuadratiX): all 1D
   data (`lobatto::tables`) and the sum-factorized batched kernels.
 
-LobattoX is its own git repository: commit here, not from the workspace root.
+Until 2026-11-25 this was the separate repository LobattoX; its history was
+imported here. Commit from the workspace root. Older entries below keep the old
+names (LobattoX, Anamesh, QuadratiX, `lobattox::`).
 This file holds the design record: decisions, contracts, lessons from the
 predecessors, and the ordered roadmap.
 
@@ -830,7 +833,7 @@ resolve the source (bump of radius 0.05, Ricker ~14 Hz, speed 0.71 along z):
 ‖u(0.4)‖ is 5× too large on 3³, within 1 % on 12³, 0.3 % on 24³ (refinement
 study 2026-11-21). The square writes every 0.1 (C++: 0.01). The default mesh
 of `acoustic_wave_2d_mesh` is
-`../Anamesh/assets/Potatoe.msh` (or the first argument).
+`../ondomathx-mesh/assets/Potatoe.msh` (or the first argument).
 Elastodynamics examples (2026-11-21), same style (one file each, no shared
 code, output in `out/<example>/`), bump of radius 0.1 on the x component ×
 `Ricker(t, 0.2, 500)`, T = 1, snapshots every 0.1, order 4, 40 × 40 squares and

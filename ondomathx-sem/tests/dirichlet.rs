@@ -5,13 +5,13 @@ mod common;
 
 use std::f64::consts::PI;
 
-use anamesh::mesh::circle::Circle;
-use anamesh::mesh::cube::Cube;
-use anamesh::mesh::square::Square;
+use ondomathx_mesh::mesh::circle::Circle;
+use ondomathx_mesh::mesh::cube::Cube;
+use ondomathx_mesh::mesh::square::Square;
 use common::*;
-use lobattox::fields::Constant;
-use lobattox::kernels::{AcousticStiffness, H1Error, L2Error};
-use lobattox::{GeoStorage, Gl, Iso2, Iso3, Numbering, Quad2, Shape, Space};
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::{AcousticStiffness, H1Error, L2Error};
+use ondomathx_sem::{GeoStorage, Gl, Iso2, Iso3, Numbering, Quad2, Shape, Space};
 
 /// Mask value at every node against a geometric predicate of the boundary.
 fn check_mask<const D: usize, S: Shape<D>>(

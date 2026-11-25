@@ -1,7 +1,7 @@
 use nalgebra::{Matrix3, SVector};
-use tetrix::finite_element::tet_10b;
-use tetrix::finite_element::tet_15;
-use tetrix::finite_element::tet_15_10b::{
+use ondomathx_tetrix::finite_element::tet_10b;
+use ondomathx_tetrix::finite_element::tet_15;
+use ondomathx_tetrix::finite_element::tet_15_10b::{
     tet_10b_to_tet_15, tet_15_to_tet_10b, tet_15_to_tet_10b_transpose,
 };
 

@@ -1,9 +1,9 @@
-use tetrix::io_vizir;
-use tetrix::io_vtk;
-use tetrix::lal;
-use tetrix::tetrix_p2_space::TetriXP2Space;
+use ondomathx_tetrix::io_vizir;
+use ondomathx_tetrix::io_vtk;
+use ondomathx_tetrix::lal;
+use ondomathx_tetrix::tetrix_p2_space::TetriXP2Space;
 
-use anamesh::mesh::{Mesh, UnstructuredMesh};
+use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
 
 use rayon::prelude::*;
 
@@ -36,7 +36,7 @@ fn main() {
     // -----------------------------------------------------------------------
     // Mesh
     // -----------------------------------------------------------------------
-    let mesh = UnstructuredMesh::new_from_mesh("../Rouage/assets/Heart.mesh")
+    let mesh = UnstructuredMesh::new_from_mesh(concat!(env!("CARGO_MANIFEST_DIR"), "/../ondomathx-mesh/assets/Heart.mesh"))
         .expect("Failed to load Heart.mesh");
     println!(
         "  nodes={}, elements={}",

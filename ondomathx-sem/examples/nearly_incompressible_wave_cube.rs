@@ -26,12 +26,12 @@
 
 use std::time::Instant;
 
-use anamesh::mesh::cube::Cube;
-use anamesh::mesh::Mesh;
-use lobattox::fields::Constant;
-use lobattox::kernels::{Divergence, IsotropicElastic};
-use lobattox::operators::{FusedKpQ4Q2, PressureMass3};
-use lobattox::{
+use ondomathx_mesh::mesh::cube::Cube;
+use ondomathx_mesh::mesh::Mesh;
+use ondomathx_sem::fields::Constant;
+use ondomathx_sem::kernels::{Divergence, IsotropicElastic};
+use ondomathx_sem::operators::{FusedKpQ4Q2, PressureMass3};
+use ondomathx_sem::{
     power_iteration, stable_dt, GeoStorage, Gll, Iso3, Numbering, Quad3, Space, VizirWriter,
     VtkField, VtkWriter,
 };

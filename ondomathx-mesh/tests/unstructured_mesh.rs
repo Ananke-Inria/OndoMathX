@@ -1,9 +1,9 @@
-extern crate anamesh;
+extern crate ondomathx_mesh;
 
 #[cfg(test)]
 mod tests {
-    use anamesh::mesh::unstructured_mesh::UnstructuredMesh;
-    use anamesh::mesh::Mesh;
+    use ondomathx_mesh::mesh::unstructured_mesh::UnstructuredMesh;
+    use ondomathx_mesh::mesh::Mesh;
 
     #[test]
     fn unstructured_mesh_from_msh() {
@@ -460,8 +460,8 @@ $EndElements\n";
     // Tetrahedron10/Hexahedron27, so writing and re-reading is the identity.
     #[test]
     fn write_msh_high_order_roundtrip() {
-        use anamesh::geometric_elements::{HEXAHEDRON27, TETRAHEDRON10};
-        use anamesh::mesh::MeshElement;
+        use ondomathx_mesh::geometric_elements::{HEXAHEDRON27, TETRAHEDRON10};
+        use ondomathx_mesh::mesh::MeshElement;
 
         // Tetrahedron10 with nodes at the internal reference positions.
         let tet_mesh = UnstructuredMesh::new_from_points_and_elements(
@@ -499,8 +499,8 @@ $EndElements\n";
     // through the an index permutation and back).
     #[test]
     fn write_mesh_high_order_roundtrip() {
-        use anamesh::geometric_elements::{HEXAHEDRON27, TETRAHEDRON10};
-        use anamesh::mesh::MeshElement;
+        use ondomathx_mesh::geometric_elements::{HEXAHEDRON27, TETRAHEDRON10};
+        use ondomathx_mesh::mesh::MeshElement;
 
         let tet_mesh = UnstructuredMesh::new_from_points_and_elements(
             TET10_INTERNAL.to_vec(),
@@ -566,8 +566,8 @@ $EndElements\n";
     // and the boundary midpoints stay on the circle.
     #[test]
     fn write_mesh_q2_circle() {
-        use anamesh::geometric_elements::{EDGE3, QUADRANGLE9};
-        use anamesh::mesh::circle::Circle;
+        use ondomathx_mesh::geometric_elements::{EDGE3, QUADRANGLE9};
+        use ondomathx_mesh::mesh::circle::Circle;
 
         let radius = 1.5;
         let center = [0.2, -0.3];
@@ -793,8 +793,8 @@ $EndElements\n";
     #[test]
     #[should_panic(expected = "dangling")]
     fn dangling_element_panics_at_construction() {
-        use anamesh::geometric_elements::{EDGE2, QUADRANGLE4};
-        use anamesh::mesh::MeshElement;
+        use ondomathx_mesh::geometric_elements::{EDGE2, QUADRANGLE4};
+        use ondomathx_mesh::mesh::MeshElement;
 
         let nodes = vec![
             [0.0, 0.0, 0.0],

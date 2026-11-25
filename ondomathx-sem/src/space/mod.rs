@@ -20,7 +20,7 @@ pub use mass::InverseMass;
 use std::marker::PhantomData;
 use std::ops::Range;
 
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::Mesh;
 use nalgebra::{SMatrix, SVector};
 use rayon::prelude::*;
 
