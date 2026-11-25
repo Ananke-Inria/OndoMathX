@@ -319,7 +319,7 @@ fn anisotropic_shapes() {
     check_anisotropic::<3, Gll3<5, 3, 4>>(&s, 3.0, &d);
 }
 
-/// An `UnstructuredMesh` numbers only isotropic layouts (Anamesh `DoFSet`).
+/// An `UnstructuredMesh` numbers only isotropic layouts (`ondomathx-mesh` `DoFSet`).
 #[test]
 #[should_panic(expected = "same count")]
 fn anisotropic_continuous_on_unstructured_panics() {

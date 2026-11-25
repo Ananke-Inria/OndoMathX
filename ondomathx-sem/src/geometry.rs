@@ -3,7 +3,7 @@
 //! Geometric nodes are stored in **tensor order** (`k = k_0 + n1·k_1 + n1²·k_2`,
 //! `n1 = 2` for Q1, `3` for Q2), node `k` sitting at reference point
 //! `(k_0, k_1, k_2) / (n1 − 1)`. The map `x(ξ) = Σ_k X_k φ_k(ξ)` is evaluated
-//! from a `GeoTab`: the Anamesh shape functions of the element
+//! from a `GeoTab`: the `ondomathx-mesh` shape functions of the element
 //! (`GeometricElement::tabulate`) at a fixed point set, columns in tensor
 //! order. No shape function is written here.
 
@@ -68,7 +68,7 @@ pub(crate) struct GeoTab<const D: usize> {
 }
 
 impl<const D: usize> GeoTab<D> {
-    /// Tabulates `ge` (Anamesh) at `points`; `perm` is its
+    /// Tabulates `ge` (`ondomathx-mesh`) at `points`; `perm` is its
     /// [`tensor_permutation`].
     pub(crate) fn new(ge: &GeometricElement, perm: &[usize], points: &[[f64; 3]]) -> Self {
         let n = ge.nshape_functions;
@@ -111,7 +111,7 @@ impl<const D: usize> GeoTab<D> {
     }
 }
 
-/// Permutation `perm[t] = i` from tensor order to the Anamesh shape-function
+/// Permutation `perm[t] = i` from tensor order to the `ondomathx-mesh` shape-function
 /// order of `ge`, found by evaluating the shape functions at the tensor
 /// reference nodes (`φ_i(ξ_t) = δ_it`). Panics if they are not nodal there.
 pub(crate) fn tensor_permutation<const D: usize>(ge: &GeometricElement, n1: usize) -> Vec<usize> {
@@ -145,7 +145,7 @@ pub(crate) fn tensor_permutation<const D: usize>(ge: &GeometricElement, n1: usiz
 /// elements always keep their single Jacobian.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GeoStorage {
-    /// Recomputed at each use from the geometric nodes and the Anamesh shape
+    /// Recomputed at each use from the geometric nodes and the `ondomathx-mesh` shape
     /// functions tabulated at the points.
     Recompute,
     /// `x`, `det J` and `cof J` stored at every point of every element.

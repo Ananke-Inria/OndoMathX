@@ -60,7 +60,7 @@ type DisplacementNodes = Quad2<Gll<5>, Gll<5>>;
 fn main() {
     let lambda = 1000.0;
 
-    // 1. The mesh: [0, 1]² cut into 40 × 40 quadrangles (Anamesh).
+    // 1. The mesh: [0, 1]² cut into 40 × 40 quadrangles (`ondomathx-mesh`).
     let mesh = Square::new([0.0, 0.0], 1.0, 1.0, 40, 40, None, None);
 
     // 2. The spaces, on the same mesh:

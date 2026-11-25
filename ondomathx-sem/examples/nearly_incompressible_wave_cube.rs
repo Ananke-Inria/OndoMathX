@@ -61,7 +61,7 @@ type DisplacementNodes = Quad3<Gll<5>, Gll<5>, Gll<5>>;
 fn main() {
     let lambda = 1000.0;
 
-    // 1. The mesh: [0, 1]³ cut into 12 × 12 × 12 hexahedra (Anamesh).
+    // 1. The mesh: [0, 1]³ cut into 12 × 12 × 12 hexahedra (`ondomathx-mesh`).
     let mesh = Cube::new([0.0, 0.0, 0.0], 1.0, 1.0, 1.0, 12, 12, 12, None, None);
 
     // 2. The spaces, on the same mesh:

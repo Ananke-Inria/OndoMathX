@@ -6,6 +6,8 @@
 //! a    = M⁻¹ (F − K uⁿ)                      // c_apply + InverseMass::apply
 //! uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ + dt² a
 //! ```
+//! ([`Space::axpby_diag`] does `M⁻¹` and the update in one pass, after
+//! `c_apply`.)
 //! with `dt = stable_dt(λ_max(M⁻¹K), 0.95)`. For continuous vectors the
 //! duplicated storage needs no assembly to evaluate energies:
 //! `⟨K u, w⟩ = dot(K_loc u, w)` with `K_loc u` from [`Space::mlt_add`], and
@@ -63,6 +65,61 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         assert_eq!(diag.len(), self.n_dup(), "diagonal length");
         assert_eq!(v.len(), self.n_dup() * C, "vector length");
         scale_nodes::<C>(nloc, diag, v);
+    }
+
+    /// `out ← a·x + b·out + c·(diag ⊙ y) + d·z` in one pass, for `C`-component
+    /// vectors, `diag` one value per duplicated node shared by the components
+    /// (as in [`Space::scale_by`]); the last term is `z = Some((d, z))`, or
+    /// absent with `None`. With `diag` the inverse mass
+    /// ([`crate::InverseMass::diagonal`]) it fuses `M⁻¹` into the update of
+    /// an explicit scheme: the leapfrog step
+    /// `uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ + dt² g(tⁿ) M⁻¹f`, written into `u_prev`
+    /// from `ku = K uⁿ` and the precomputed source `minv_f = M⁻¹f`, is
+    /// `axpby_diag(2.0, &u_now, -1.0, &mut u_prev, -dt * dt, inv_m, &ku,
+    /// Some((dt * dt * g, &minv_f)))`, the same floating-point operations as
+    /// `M⁻¹` applied to `ku` and then the update. As in [`Space::mlt_add`],
+    /// `b = 0` never reads `out`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn axpby_diag<const C: usize>(
+        &self,
+        a: f64,
+        x: &[f64],
+        b: f64,
+        out: &mut [f64],
+        c: f64,
+        diag: &[f64],
+        y: &[f64],
+        z: Option<(f64, &[f64])>,
+    ) {
+        let nloc = Self::NLOC;
+        let block = C * nloc;
+        assert_eq!(diag.len(), self.n_dup(), "diagonal length");
+        assert_eq!(x.len(), self.n_dup() * C, "x length");
+        assert_eq!(y.len(), self.n_dup() * C, "y length");
+        assert_eq!(out.len(), self.n_dup() * C, "out length");
+        if let Some((_, z)) = z {
+            assert_eq!(z.len(), self.n_dup() * C, "z length");
+        }
+        out.par_chunks_mut(block).enumerate().for_each(|(e, ob)| {
+            let dg = &diag[e * nloc..(e + 1) * nloc];
+            for (k, o) in ob.chunks_exact_mut(nloc).enumerate() {
+                let r = e * block + k * nloc..e * block + (k + 1) * nloc;
+                let (xc, yc) = (&x[r.clone()], &y[r.clone()]);
+                let it = o.iter_mut().zip(xc).zip(yc).zip(dg);
+                match (b == 0.0, z) {
+                    (true, None) => it.for_each(|(((o, &xv), &yv), &dv)| *o = a * xv + c * (dv * yv)),
+                    (false, None) => {
+                        it.for_each(|(((o, &xv), &yv), &dv)| *o = a * xv + b * *o + c * (dv * yv))
+                    }
+                    (true, Some((d, z))) => it.zip(&z[r]).for_each(|((((o, &xv), &yv), &dv), &zv)| {
+                        *o = a * xv + c * (dv * yv) + d * zv
+                    }),
+                    (false, Some((d, z))) => it.zip(&z[r]).for_each(|((((o, &xv), &yv), &dv), &zv)| {
+                        *o = a * xv + b * *o + c * (dv * yv) + d * zv
+                    }),
+                }
+            }
+        });
     }
 
     /// `Σ_dup m · a·b` over the duplicated nodes and the `C` components. With
@@ -155,7 +212,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
 /// Each iterate is `M`-normalized; the estimate is the Rayleigh quotient
 /// `⟨x, M⁻¹A x⟩_M = ⟨x, A x⟩` (a lower bound of `λ_max`, monotone for
 /// symmetric `A`). Stops when its relative change drops below `rtol`, or after
-/// `max_iter` iterations. Same role as TetriX `lal::power_iteration`, which
+/// `max_iter` iterations. Same role as `ondomathx-tetrix`'s `lal::power_iteration`, which
 /// takes `A` and `M⁻¹` separately and estimates with the ∞-norm ratio.
 pub fn power_iteration(
     mut x: Vec<f64>,

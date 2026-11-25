@@ -40,7 +40,7 @@ cargo fmt
   `e·C·NLOC .. (e+1)·C·NLOC` (`C` components, `NLOC = (P+1)^D`). Inside it there is
   one contiguous slice per component, with nodes in **tensor lexicographic order**,
   `i` fastest: `node = i + (P+1)·j + (P+1)²·k`, with `i` along reference `u`.
-- **Anamesh numbering is used at setup only.** A `DoFSet` built from the GLL points
+- **`ondomathx-mesh` numbering is used at setup only.** A `DoFSet` built from the GLL points
   in tensor order on `[0,1]^D` makes `get_numbering` return tensor-ordered local
   indices, because `DoFSet` keeps the order of `pos_list`. No permutation table
   is needed. The numbering is consumed to build the shared groups, then dropped.
@@ -92,7 +92,7 @@ cargo fmt
   - **LobattoX computes no 1D data** (decided 2026-11-20): points, weights,
     differentiation and interpolation matrices all come from `lobatto::tables`
     (the shape markers' `Tables` only store them as arrays).
-  - Anamesh works with `[f64; D]`; conversion happens at the interface.
+  - `ondomathx-mesh` works with `[f64; D]`; conversion happens at the interface.
   - **`det` and `cofactor` are written out for D = 2, 3** (`geometry.rs`, on
     `SMatrix`), not nalgebra's `determinant`/`try_inverse`. On a generic
     `const D` those require `Const<D>: DimMin<Const<D>, Output = Const<D>>`,
@@ -149,7 +149,7 @@ cargo fmt
     generic rectangular kernels otherwise; the choice folds at compile time.
     (Until 2026-11-24: `Shape::ref_derivative`, removed with the engine loop.)
   - Geometry (since step 8): affine `det`/`cof` are hoisted per lane. Q1/Q2
-    maps are evaluated per point from full tables of the **Anamesh shape
+    maps are evaluated per point from full tables of the **`ondomathx-mesh` shape
     functions** at the nodes (`GeometricElement::tabulate`, `GeoTab` in
     `geometry.rs`, columns in tensor node order), `x = Σ_k X_k φ_k`; the same
     tables serve `Space::map_and_jacobian`. LobattoX writes no shape function.
@@ -164,7 +164,7 @@ cargo fmt
 - **Parameter fields**, generic and monomorphized (C++ `Field::Regularity`):
   - `Constant`.
   - `PerLabel`: a table indexed by the bare `usize` mesh label.
-  - `Function`: an Anamesh-style `fn(xyz, &params) -> value` evaluated on the fly,
+  - `Function`: an `ondomathx-mesh`-style `fn(xyz, &params) -> value` evaluated on the fly,
     with xyz recomputed from the element nodes.
   - `PointData`: one value per duplicated DOF. `PointData::sample(fn)` fills it
     once from a function.
@@ -180,9 +180,9 @@ cargo fmt
     `Function { f, params }`; `PointData(Vec<f64>)` with
     `PointData::sample(&space, f)`; `Inverse(F)` = `1/F`, for the acoustic
     mass `1/κ`.
-  - **`Function` takes `f(params, xyz)`**, the argument order of Anamesh's
+  - **`Function` takes `f(params, xyz)`**, the argument order of `ondomathx-mesh`'s
     `Diffeomorphism` (`fn(&[f64] params, &[f64] xyz, …)`). The interview note
-    said `fn(xyz, &params)`; the Anamesh order was kept for consistency.
+    said `fn(xyz, &params)`; the `ondomathx-mesh` order was kept for consistency.
   - Kernels: `AcousticStiffness { rho }` (flux `∇p/ρ`),
     `IsotropicElastic { lambda, mu }` (flux `σ(u)`, `C = D`), and `Mass { coef }`
     (any `C`, no flux, so no derivative kernel runs).
@@ -214,12 +214,12 @@ cargo fmt
     value of `f` divided by the mass coefficient.
   - Point source: `F_i = φ_i(x_s)·g(t)` on one element containing `x_s`, followed
     by the shared-DOF sum. The location comes from `Mesh::locate` (to add to
-    Anamesh). Until then, the user gives `(element, uvw)`.
+    `ondomathx-mesh`). Until then, the user gives `(element, uvw)`.
 
 ### Output
 - **Vizir** (done, step 17, `vizir.rs`): a port of the C++ `IO_Vizir.h`: `HOSolAt{Quadrilaterals,Hexahedra}Q{1,2}`
   with `NodesPositions` set to the GLL points, degree P, and the mesh written by
-  Anamesh `write_mesh`. Duplicated storage is exactly Vizir's per-element layout,
+  `ondomathx-mesh` `write_mesh`. Duplicated storage is exactly Vizir's per-element layout,
   so no averaging is needed.
 - **VTK** (done, `vtk.rs`): legacy ASCII on **tessellated** elements, with P^D linear sub-cells per
   element on the GLL points (VTK_QUAD 9 / VTK_HEXAHEDRON 12; connectivity as in
@@ -234,7 +234,8 @@ cargo fmt
 
 ### Scope and organisation
 - A library plus integration tests and examples. No CLI or config-file driver.
-- Path dependency on `anamesh` while the APIs co-evolve; `lobatto = "0.1.4"`
+- `ondomathx-mesh` from the same workspace, by path and version (`path =
+  "../ondomathx-mesh", version = "0.1.0"`, for publishing); `lobatto = "0.1.4"`
   from crates.io (QuadratiX rule: version-only dependencies between published
   crates).
 - **Validation**:
@@ -287,7 +288,7 @@ cargo fmt
   - **LobattoX builds no 1D data:** the shape markers take the GLL points,
     weights and D from `lobatto::tables`. Interpolation at arbitrary points
     (point sources) will use `lobatto::tables::interpolation_row`.
-- **Anamesh**: `Mesh::locate(x) -> (element, uvw)` (bounding boxes + Newton on
+- **`ondomathx-mesh`**: `Mesh::locate(x) -> (element, uvw)` (bounding boxes + Newton on
   the element map), reusable by TetriX.
 
 ## Design decisions: mixed spaces and quadratures (2026-11-20)
@@ -338,25 +339,25 @@ dedicated implementation. This section revises "Method and storage" and
   loop bounds and slice lengths.
 - `gll.rs` / `Gll1d<NP>` is subsumed by the per-direction tables of the
   marker implementation (`Gll1<N>` in `shape.rs`); removed in step 8.
-- **Anisotropic + continuous** is not supported by Anamesh's `DoFSet`
+- **Anisotropic + continuous** is not supported by `ondomathx-mesh`'s `DoFSet`
   numbering (it needs a point set symmetric under the reference element's
-  edge/face orientations). It will be an Anamesh feature for geometries that
+  edge/face orientations). It will be an `ondomathx-mesh` feature for geometries that
   can provide an explicit numbering (structured `Square`/`Cube` already have
   `get_numbering(nlocdofx, nlocdofy[, nlocdofz])`), as in the C++ code.
-  **Done in step 9** through Anamesh `Mesh::get_tensor_numbering`: a space
+  **Done in step 9** through `ondomathx-mesh` `Mesh::get_tensor_numbering`: a space
   built from a `Square`/`Cube` numbers anisotropic shapes; an
   `UnstructuredMesh` (and `Circle`) panics on anisotropic counts.
 
 ### Meshes and geometry (step 9, decided 2026-11-20)
 - `Space::builder(&impl Mesh)` / `Space::new(&impl Mesh, numbering)`: any
-  Anamesh mesh (`UnstructuredMesh`, `Square`, `Cube`, `Circle`), borrowed only
+  `ondomathx-mesh` mesh (`UnstructuredMesh`, `Square`, `Cube`, `Circle`), borrowed only
   during construction. The numbering is `Mesh::get_tensor_numbering(S::N)`.
 - **The mesh decides the geometry, per element** (`Mesh::is_mapped_element`,
-  added to Anamesh): false → the map is the interpolation of the element's
+  added to `ondomathx-mesh`): false → the map is the interpolation of the element's
   affine/Q1/Q2 geometric nodes (groups Affine/Q1/Q2 as before); true (analytic
   map, attached deformation) → group `GeoKind::Mapped`, geometry from the
   mesh's own map (`Mesh::get_element_def` and `get_element_grad_def`, added to
-  Anamesh) stored at every point set at construction. A mapped element whose
+  `ondomathx-mesh`) stored at every point set at construction. A mapped element whose
   map is affine (tested on the 3^D reference nodes) joins the affine group.
   This replaces both the former panic on attached deformations and the
   proposed `.geometry(Isoparametric | Exact)` switch ("isoparametric" was the
@@ -418,8 +419,8 @@ dedicated implementation. This section revises "Method and storage" and
   dt grows by at most 1.3 % against 1e-6 (square 9.926e-4 → 1.006e-3, cube
   4.588e-3 → 4.638e-3, the others ≤ 0.2 %), inside the 5 % safety margin;
   iterations 701 → 12 (square), 756 → 35 (cube), 18–35 elsewhere.
-- Shared toolbox `ondomathx-toolbox` (option (a): it depends on Anamesh,
-  behind a cargo feature; Anamesh stays independent). Contents to be decided:
+- Shared toolbox `ondomathx-toolbox` (option (a): it depends on `ondomathx-mesh`,
+  behind a cargo feature; `ondomathx-mesh` stays independent). Contents to be decided:
   power iteration, norms, `stable_dt`, parameter fields (generalized over a
   point-context trait), shared-DOF CSR from a numbering, source signals
   (Ricker, Gaussian, C∞ bump), low-level VTK/Vizir writers, test meshes,
@@ -434,11 +435,11 @@ dedicated implementation. This section revises "Method and storage" and
   Q1 interpolation of its corners is demoted to the Q1 group (straight but
   non-affine elements, e.g. a bilinear deformation). Deviations are measured in
   reference coordinates, `|J⁻¹(X_k − y_k)|∞ ≤ 1e-10`, with `J` the frame of
-  corner 0 (Anamesh rule). A degenerate frame panics.
+  corner 0 (`ondomathx-mesh` rule). A degenerate frame panics.
 - Geometric nodes are copied in **tensor order** (`k_0 + n1·k_1 + n1²·k_2`,
   `n1 = 2` or `3`): the classification builds the affine frame from the
   corners, and the geometry tables have tensor-ordered columns. The
-  permutation from Anamesh's node order is found by evaluating its shape
+  permutation from `ondomathx-mesh`'s node order is found by evaluating its shape
   functions at the tensor reference nodes, with no table hard-coded.
 - Shared-DOF entries are component-free (`e·NLOC + node`); component `c` of a
   `C`-component vector is at `(i / NLOC)·C·NLOC + c·NLOC + i % NLOC`.

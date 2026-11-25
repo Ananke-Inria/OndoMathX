@@ -57,7 +57,7 @@ impl<const D: usize> Field<D> for PerLabel {
     }
 }
 
-/// `f(params, xyz)`, evaluated on the fly (same argument order as Anamesh's
+/// `f(params, xyz)`, evaluated on the fly (same argument order as `ondomathx-mesh`'s
 /// `Diffeomorphism`). `xyz` has `D` entries, recomputed from the element map.
 #[derive(Clone, Debug)]
 pub struct Function {

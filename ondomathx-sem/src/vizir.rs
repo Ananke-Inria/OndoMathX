@@ -1,7 +1,7 @@
 //! Vizir high-order solutions (`HOSolAt…`, libMeshb `.sol`), port of the C++
 //! `core/Sources/FEM/LobattoX/IO/IO_Vizir.h`.
 //!
-//! The mesh itself is written by Anamesh (`Mesh::write_mesh`, Medit `.mesh`);
+//! The mesh itself is written by `ondomathx-mesh` (`Mesh::write_mesh`, Medit `.mesh`);
 //! the `.sol` file holds, per element, the solution at the GLL nodes, whose
 //! reference positions are given once (`HOSolAt<tag>NodesPositions`).
 //! Duplicated storage is exactly this per-element layout: no averaging.
@@ -13,9 +13,9 @@
 //! ```
 //!
 //! Conventions (as the C++ writer, except `Dimension`):
-//! - `Dimension 3`, to match Anamesh's `write_mesh`, which always writes a 3D
+//! - `Dimension 3`, to match `ondomathx-mesh`'s `write_mesh`, which always writes a 3D
 //!   mesh (`z = 0` in 2D); the node positions have `D` reference coordinates.
-//! - Rows follow the order of the elements in the `.mesh` section (Anamesh
+//! - Rows follow the order of the elements in the `.mesh` section (`ondomathx-mesh`
 //!   writes each section in mesh-element order), not the storage order.
 //! - `1 C` after the element count: one solution field with `C` values per
 //!   node; then `P NLOC` (degree, nodes per element).

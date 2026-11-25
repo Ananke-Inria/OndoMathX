@@ -7,9 +7,9 @@
 //! ```
 //! with spectral elements of order 6 and the leapfrog scheme in time.
 //!
-//! The disc is Anamesh's `Circle` (a square core and four curved arms). Its
+//! The disc is `ondomathx-mesh`'s `Circle` (a square core and four curved arms). Its
 //! arms follow the exact circle map, which the space stores at every node
-//! ("mapped" elements), so the circle is exact. Anamesh splits the disc in
+//! ("mapped" elements), so the circle is exact. `ondomathx-mesh` splits the disc in
 //! 1620 elements here, the C++ `Circle(6, 6)` in 1728.
 //!
 //! ```text
@@ -26,7 +26,6 @@ use ondomathx_mesh::mesh::Mesh;
 use ondomathx_sem::fields::Constant;
 use ondomathx_sem::kernels::AnisotropicAcoustic;
 use ondomathx_sem::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
-use rayon::prelude::*;
 
 /// Ricker wavelet in time (C++ `Ricker(t, t0, s0)`).
 fn ricker(t: f64, t0: f64, s0: f64) -> f64 {
@@ -46,7 +45,7 @@ fn bump(x: [f64; 2], center: [f64; 2], r0: f64, s0: f64) -> f64 {
 }
 
 fn main() {
-    // 1. The mesh: the unit disc (Anamesh), Q2 elements for the Vizir output.
+    // 1. The mesh: the unit disc (`ondomathx-mesh`), Q2 elements for the Vizir output.
     let mesh = Circle::new([0.0, 0.0], 1.0, 54, None, Some(true));
 
     // 2. The space: Gauss–Lobatto elements of order 6 (7 points per direction),
@@ -100,20 +99,17 @@ fn main() {
     let mut u_prev = vec![0.0; n]; // uⁿ⁻¹
     let mut u_now = vec![0.0; n]; // uⁿ
     let mut ku = vec![0.0; n]; // M⁻¹K uⁿ
+    // M⁻¹ as one value per node, fused into the update below.
+    let inv_diag = inv_mass.diagonal().unwrap();
     let mut n_out = 0;
     let start = Instant::now();
     for step in 0..steps {
         let t = step as f64 * dt;
         space.c_apply::<1>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
-        inv_mass.apply::<1>(&mut ku); // M⁻¹K uⁿ
         let g = ricker(t, 0.2, 500.0);
-        // uⁿ⁺¹ is written into u_prev (uⁿ⁻¹ is no longer needed), then swapped.
-        u_prev
-            .par_iter_mut()
-            .zip(&u_now)
-            .zip(&ku)
-            .zip(&source)
-            .for_each(|(((p, &u), &a), &s)| *p = 2.0 * u - *p - dt * dt * a + dt * dt * g * s);
+        // uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ + dt² g M⁻¹f in one pass, written into
+        // u_prev (uⁿ⁻¹ is no longer needed), then swapped.
+        space.axpby_diag::<1>(2.0, &u_now, -1.0, &mut u_prev, -dt * dt, inv_diag, &ku, Some((dt * dt * g, &source)));
         std::mem::swap(&mut u_prev, &mut u_now);
 
         if step > 0 && step % output_every == 0 {

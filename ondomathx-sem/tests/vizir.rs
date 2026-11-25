@@ -1,5 +1,5 @@
 //! Vizir `.sol` output (`VizirWriter`): header, node positions, rows in the
-//! order of Anamesh's `.mesh` section, values.
+//! order of `ondomathx-mesh`'s `.mesh` section, values.
 
 mod common;
 
@@ -56,7 +56,7 @@ fn parse(path: &std::path::Path) -> Sol {
     (tag, pos, n_elem, c, dl[0], rows)
 }
 
-/// Number of entries of a section of a Medit `.mesh` written by Anamesh.
+/// Number of entries of a section of a Medit `.mesh` written by `ondomathx-mesh`.
 fn section_count(path: &std::path::Path, section: &str) -> usize {
     let text = std::fs::read_to_string(path).unwrap();
     let lines: Vec<&str> = text.lines().collect();
@@ -96,7 +96,7 @@ fn check<const D: usize, S: ondomathx_sem::Shape<D>>(
             }
         }
     }
-    // The same count in Anamesh's .mesh section.
+    // The same count in `ondomathx-mesh`'s .mesh section.
     let mesh_path = temp(&format!("{name}.mesh"));
     mesh.write_mesh(mesh_path.to_str().unwrap()).unwrap();
     let section = tag.strip_suffix("Q1").unwrap_or(tag);

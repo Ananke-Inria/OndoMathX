@@ -24,7 +24,6 @@ use ondomathx_mesh::mesh::Mesh;
 use ondomathx_sem::fields::Constant;
 use ondomathx_sem::kernels::AnisotropicAcoustic;
 use ondomathx_sem::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
-use rayon::prelude::*;
 
 /// Gaussian (C++ `Gaussian(t, t0, s0)`).
 fn gaussian(t: f64, t0: f64, s0: f64) -> f64 {
@@ -32,7 +31,7 @@ fn gaussian(t: f64, t0: f64, s0: f64) -> f64 {
 }
 
 fn main() {
-    // 1. The mesh: [0, 1]² cut into 100 × 100 quadrangles (Anamesh).
+    // 1. The mesh: [0, 1]² cut into 100 × 100 quadrangles (`ondomathx-mesh`).
     let mesh = Square::new([0.0, 0.0], 1.0, 1.0, 100, 100, None, None);
 
     // 2. The space: Gauss–Lobatto elements of order 4 (5 points per direction),
@@ -91,18 +90,16 @@ fn main() {
     // 7. The leapfrog scheme: uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ.
     //    Vectors hold the values at the nodes of every element (a node shared
     //    by several elements has one copy per element).
+    // M⁻¹ as one value per node, fused into the update below.
+    let inv_diag = inv_mass.diagonal().unwrap();
     let mut n_out = 0;
     let start = Instant::now();
     for step in 0..steps {
         space.c_apply::<1>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
-        inv_mass.apply::<1>(&mut ku); // M⁻¹K uⁿ
 
-        // uⁿ⁺¹ is written into u_prev (uⁿ⁻¹ is no longer needed), then swapped.
-        u_prev
-            .par_iter_mut()
-            .zip(&u_now)
-            .zip(&ku)
-            .for_each(|((p, &u), &a)| *p = 2.0 * u - *p - dt * dt * a);
+        // uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ in one pass, written into u_prev (uⁿ⁻¹
+        // is no longer needed), then swapped.
+        space.axpby_diag::<1>(2.0, &u_now, -1.0, &mut u_prev, -dt * dt, inv_diag, &ku, None);
         std::mem::swap(&mut u_prev, &mut u_now);
 
         if step % output_every == 0 {

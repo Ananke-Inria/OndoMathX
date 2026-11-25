@@ -139,6 +139,55 @@ fn apply_and_scale_by() {
     }
 }
 
+/// `axpby_diag` is the inverse mass then the linear combination, bit for bit,
+/// on a 2-component vector (the diagonal shared by the components), with and
+/// without the fourth term; with `b = 0` it never reads `out`. The leapfrog
+/// form gives exactly the update the examples write by hand.
+#[test]
+fn axpby_diag_fuses_the_inverse_mass() {
+    let mesh = square(3, 2, true, Some(bending_2d()));
+    let space = Space::<2, Iso2<4>>::new(&mesh, Numbering::Continuous);
+    let inv_m = space.c_inverse_mass(&Constant(2.0));
+    let diag = inv_m.diagonal().unwrap();
+    let x = space.sample::<2>(|p| [p[0] * p[1], p[1].sin()]);
+    let y = space.sample::<2>(|p| [p[0].cos(), p[0] + p[1]]);
+    let z = space.sample::<2>(|p| [p[0] - p[1], (2.0 * p[1]).cos()]);
+    let out0 = space.sample::<2>(|p| [p[1], p[0] * p[0]]);
+    let (a, b, c, d) = (2.0, -1.0, -1e-3, 0.25);
+    let mut my = y.clone();
+    inv_m.apply::<2>(&mut my);
+    let n = x.len();
+
+    let zs: [Option<(f64, &[f64])>; 2] = [None, Some((d, &z))];
+    let cases = [(b, zs[0]), (0.0, zs[0]), (b, zs[1]), (0.0, zs[1])];
+    for (bb, zz) in cases {
+        let expected: Vec<f64> = (0..n)
+            .map(|i| {
+                let v = if bb == 0.0 { a * x[i] + c * my[i] } else { a * x[i] + bb * out0[i] + c * my[i] };
+                match zz {
+                    Some((d, z)) => v + d * z[i],
+                    None => v,
+                }
+            })
+            .collect();
+        let mut out = if bb == 0.0 { vec![f64::NAN; n] } else { out0.clone() };
+        space.axpby_diag::<2>(a, &x, bb, &mut out, c, diag, &y, zz);
+        assert_eq!(out, expected, "b = {bb}, z: {}", zz.is_some());
+    }
+
+    // The examples' leapfrog update with a source, written by hand.
+    let (dt, g) = (1e-3, 0.7);
+    let mut hand = out0.clone();
+    hand.iter_mut()
+        .zip(&x)
+        .zip(&my)
+        .zip(&z)
+        .for_each(|(((p, &u), &a), &s)| *p = 2.0 * u - *p - dt * dt * a + dt * dt * g * s);
+    let mut fused = out0.clone();
+    space.axpby_diag::<2>(2.0, &x, -1.0, &mut fused, -dt * dt, diag, &y, Some((dt * dt * g, &z)));
+    assert_eq!(fused, hand);
+}
+
 #[test]
 fn max_eigenvalue_matches_dense() {
     // Acoustics, two materials, curved Q2.
