@@ -648,6 +648,8 @@ name = "ondomathx-toolbox"
 version = "0.1.0"
 dependencies = [
  "ondomathx-mesh",
+ "ondomathx-sem",
+ "ondomathx-tetrix",
  "rayon",
 ]
 

@@ -38,15 +38,20 @@ Decisions (all approved):
 - **D1** counts: TetriX names in both, `num_elements()`, `num_dofs()`
   (unique DoFs), `num_loc_dofs()`, plus `num_dg_dofs()` (duplicated size).
 - **D2** numbering: one `ondomathx_toolbox::numbering::DgMap` (`glob2dg` as
-  CSR, `dg2glob`, multiplicity) built from a `loc2glob` table, owned by both
-  spaces; its constructor from a mesh and a DoF set behind the `mesh`
-  feature; sem's pruned shared groups stay a fast path of `sum_shared`.
+  CSR, `dg2glob`, multiplicity, and the pruned shared groups for
+  `sum_shared`), `u32` indices, built by `DgMap::new(loc2glob, nloc, n_dof)`
+  from a flat table in storage order or by `DgMap::from_numbering(&numbering,
+  n_dof, &elements)` from the result of `UnstructuredMesh::get_numbering` or
+  `Mesh::get_tensor_numbering` (no `mesh` feature needed). Both spaces
+  replace their own maps with it in step 3.
 - **D3** transfers: `collect_dg`, `collect_avg_dg`, `scatter_cg` (TetriX
   names) plus `sum_shared` (in place) and `multiplicity`, in both.
-- **D4** mass: TetriX's model (global-size mass vector, `mlt_inverse_mass`
-  summing the copies and dividing in one pass) **after a benchmark** on
-  sem's large cubes. The benchmark also compares, for TetriX: sum+divide then
-  update; sum then `axpby_diag`; one fused sum+divide+update pass.
+- **D4** mass: **sem's model**, the fastest (user's choice after the
+  benchmark): the shared-DoF sum `sum_shared`, then `axpby_diag` with the
+  inverse lumped mass per copy (a DG-size vector). TetriX's time loop
+  switches to it in step 3; `mlt_inverse_mass` (TetriX's sum and divide in
+  one pass) stays available in `DgMap`. The fused sum+divide+update pass is
+  dropped.
 - **D5** operators: TetriX's argument order, `mlt_<op>(u, v, α)` overwrites
   `v`, `mlt_add_<op>(u, v, α)` does `v ← v + αAu`; sem's generic engine
   becomes `mlt(kernel, u, v, α)` / `mlt_add(kernel, u, v, α)`.
@@ -76,7 +81,27 @@ Order of work (each step proposed in detail and approved first):
    module removed; its driver: ρ = 5.078259e5 in 9 iterations (was 17),
    dt unchanged to 7 digits. sem's examples: same dt and iteration counts,
    and the acoustic cube is now identical from run to run.
-2. `DgMap` and the D4 benchmark.
-3. The renaming (D1, D3, D5, D7, D8) and nalgebra 0.34 (D9): breaking,
-   `ondomathx-sem` 0.2.0.
+2. **Done 2026-11-25**: `ondomathx_toolbox::numbering::DgMap` (D2, D3
+   operations: `collect_dg`, `collect_avg_dg`, `scatter_cg`, `sum_shared`,
+   `mlt_inverse_mass`, `multiplicity`; DG layout `[elem][comp][node]`, global
+   layout `[dof][comp]`; copies summed in increasing DG index, bit-identical
+   to TetriX's and sem's current sums) and the D4 benchmark,
+   `ondomathx-toolbox/benches/d4_mass.rs` (path-only dev-dependencies on sem
+   and TetriX). Post-`K u` time of a leapfrog step, ms, M4 Pro, 10 threads
+   (1 / 14 threads in the bench's output): (a) sum + `axpby_diag`, (b)
+   `mlt_inverse_mass` + update, (c) fused:
+   - sem acoustic cube 48³ Q4, 7.2 M DoFs (`K u` 9.7): (a) 4.8, (b) 4.8,
+     (c) 8.2; 1 thread (a) 15.7, (b) 18.3, (c) 42.6.
+   - sem elastic cube 32³ Q4, 6.4 M DoFs, C = 3 (`K u` 7.7): (a) 4.3,
+     (b) 4.6, (c) 7.1.
+   - TetriX Heart, 222k DoFs (`K u` 0.33): (a) 0.37, (b) 0.39, (c) 0.38;
+     14 threads (thread-overhead bound): (a) 0.61, (b) 0.54, (c) 0.47.
+   `DgMap` against the crates' current maps, bit-identical: `sum_shared`
+   3–17 % faster than sem's `c_sum_shared`, `mlt_inverse_mass` 3 % (1
+   thread) to 36 % (14 threads) faster than TetriX's. Memory: 199 MB on the
+   acoustic cube (one DG vector 111 MB; sem's shared groups ≈ 110 MB), 59 MB
+   on the elastic cube, 10 MB on the Heart (TetriX's own tables ≈ 25 MB).
+3. Both spaces adopt `DgMap` (D2) and the mass model (D4: TetriX's loop
+   to `sum_shared` + `axpby_diag`); the renaming (D1, D3, D5, D7, D8) and
+   nalgebra 0.34 (D9): breaking, `ondomathx-sem` 0.2.0.
 4. The I/O formats.
