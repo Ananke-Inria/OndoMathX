@@ -23,12 +23,9 @@ use ondomathx_mesh::mesh::square::Square;
 use ondomathx_mesh::mesh::Mesh;
 use ondomathx_sem::fields::Constant;
 use ondomathx_sem::kernels::AnisotropicAcoustic;
-use ondomathx_sem::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
+use ondomathx_sem::{Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
 
-/// Gaussian (C++ `Gaussian(t, t0, s0)`).
-fn gaussian(t: f64, t0: f64, s0: f64) -> f64 {
-    (-(t - t0) * (t - t0) * s0).exp()
-}
+use ondomathx_toolbox::signals::{gaussian};
 
 fn main() {
     // 1. The mesh: [0, 1]² cut into 100 × 100 quadrangles (`ondomathx-mesh`).
@@ -54,20 +51,20 @@ fn main() {
     // 4. The time step: 95 % of the stability limit 2 / √λ_max(M⁻¹K), with
     //    λ_max estimated by power iteration.
     let eig = space.c_max_eigenvalue::<1>(&stiffness, &density, 5000, 1e-3);
-    let dt = stable_dt(eig.lambda, 0.95);
+    let dt = 0.95 * 2.0 / eig.lambda.sqrt(); // 95 % of the leapfrog limit 2 / √λ_max
     let t_end = 1.0;
     let steps = (t_end / dt).ceil() as usize;
     println!(
         "dt = {dt:.4e} ({} power iterations), {steps} steps",
-        eig.iterations
+        eig.n_iter
     );
 
     // 5. The initial state: u⁰ = 0 and, by a Taylor expansion,
     //    u¹ = dt v0 − dt³/6 M⁻¹K v0 (as the C++).
     let n = space.n_dup();
     let v0 = space.sample::<1>(|x| {
-        [gaussian(x[0], 0.9, 500.0)
-            * gaussian(x[1], 0.5, 500.0)
+        [gaussian(x[0] - 0.9, 0.002)
+            * gaussian(x[1] - 0.5, 0.002)
             * (2.0 * PI * 20.0 * (x[0] + x[1])).cos()]
     });
     let mut ku = vec![0.0; n]; // M⁻¹K u

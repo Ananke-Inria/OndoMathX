@@ -4,9 +4,10 @@ use common::*;
 use ondomathx_sem::fields::{Constant, PerLabel};
 use ondomathx_sem::kernels::{AcousticStiffness, IsotropicElastic};
 use ondomathx_sem::{
-    dot, stable_dt, Iso2, Iso3, Numbering, PointKernel, Shape, Space, VtkField, VtkWriter,
+    Iso2, Iso3, Numbering, PointKernel, Shape, Space, VtkField, VtkWriter,
 };
 use nalgebra::DMatrix;
+use ondomathx_toolbox::lal::dot;
 
 /// Largest generalized eigenvalue of `(K, M)` by a dense solve: the continuous
 /// basis is one indicator vector per global node (the shared-DOF sum of a unit
@@ -229,8 +230,6 @@ fn max_eigenvalue_matches_dense() {
         "{} vs {exact}",
         est.lambda
     );
-
-    assert!((stable_dt(4.0, 0.95) - 0.95).abs() < 1e-15);
 }
 
 #[test]
@@ -301,7 +300,8 @@ fn vtk_writer_counts() {
 #[test]
 fn power_iteration_on_a_composite_operator() {
     use ondomathx_sem::kernels::{Divergence, DivergenceTranspose};
-    use ondomathx_sem::{power_iteration, GeoStorage, Gl, Gll, Quad2};
+    use ondomathx_sem::{GeoStorage, Gl, Gll, Quad2};
+    use ondomathx_toolbox::lal::power_iteration;
     type DispRule = Quad2<Gll<4>, Gll<4>>;
     type PresMass = Quad2<Gl<2>, Gl<2>>;
     let mesh = square(2, 2, true, Some(bending_2d()));
@@ -337,15 +337,15 @@ fn power_iteration_on_a_composite_operator() {
     let inv_m = su.c_inverse_mass(&rho);
     let exact = dense_lambda_max_of::<2, _, 2>(&su, local, &m);
     let est = power_iteration(
-        su.c_start_vector::<2>(),
+        |y| inv_m.apply::<2>(y),
         |x, y| {
             local(x, y);
             su.c_sum_shared::<2>(y);
-            inv_m.apply::<2>(y);
         },
         |a, b| su.mass_inner::<2>(&m, a, b),
-        50_000,
+        su.c_start_vector::<2>(),
         1e-14,
+        50_000,
     );
     assert!(
         est.lambda <= exact * (1.0 + 1e-12),
@@ -356,7 +356,7 @@ fn power_iteration_on_a_composite_operator() {
         (est.lambda - exact).abs() < 1e-8 * exact,
         "{} vs {exact} ({} iterations)",
         est.lambda,
-        est.iterations
+        est.n_iter
     );
     // λ dominates: the spectrum is far above the elastic one.
     let elastic = su.c_max_eigenvalue::<2>(&r, &rho, 50_000, 1e-12).lambda;

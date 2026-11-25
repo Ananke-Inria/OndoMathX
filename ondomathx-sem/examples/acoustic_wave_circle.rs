@@ -25,24 +25,9 @@ use ondomathx_mesh::mesh::circle::Circle;
 use ondomathx_mesh::mesh::Mesh;
 use ondomathx_sem::fields::Constant;
 use ondomathx_sem::kernels::AnisotropicAcoustic;
-use ondomathx_sem::{stable_dt, Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
+use ondomathx_sem::{Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
 
-/// Ricker wavelet in time (C++ `Ricker(t, t0, s0)`).
-fn ricker(t: f64, t0: f64, s0: f64) -> f64 {
-    let t = t - t0;
-    (4.0 * s0 * s0 * t * t - 2.0 * s0) * (-t * t * s0).exp()
-}
-
-/// Smooth bump with compact support, 1 at `center`, 0 beyond `r0`
-/// (C++ `CInfty0(x, center, r0, s0)`).
-fn bump(x: [f64; 2], center: [f64; 2], r0: f64, s0: f64) -> f64 {
-    let r2 = (x[0] - center[0]).powi(2) + (x[1] - center[1]).powi(2);
-    if r2 >= r0 * r0 {
-        0.0
-    } else {
-        (s0 * r0 * r0 / (r2 - r0 * r0) + s0).exp()
-    }
-}
+use ondomathx_toolbox::signals::{bump, ricker};
 
 fn main() {
     // 1. The mesh: the unit disc (`ondomathx-mesh`), Q2 elements for the Vizir output.
@@ -68,12 +53,12 @@ fn main() {
     // 4. The time step: 95 % of the stability limit 2 / √λ_max(M⁻¹K), with
     //    λ_max estimated by power iteration.
     let eig = space.c_max_eigenvalue::<1>(&stiffness, &density, 5000, 1e-3);
-    let dt = stable_dt(eig.lambda, 0.95);
+    let dt = 0.95 * 2.0 / eig.lambda.sqrt(); // 95 % of the leapfrog limit 2 / √λ_max
     let t_end = 2.0;
     let steps = (t_end / dt).ceil() as usize;
     println!(
         "dt = {dt:.4e} ({} power iterations), {steps} steps",
-        eig.iterations
+        eig.n_iter
     );
 
     // 5. The source f(x) g(t). The load vector F = ∫ f φ_i is computed once;
@@ -106,7 +91,7 @@ fn main() {
     for step in 0..steps {
         let t = step as f64 * dt;
         space.c_apply::<1>(&stiffness, &u_now, &mut ku); // K uⁿ, assembled
-        let g = ricker(t, 0.2, 500.0);
+        let g = ricker(t, 7.0, 0.2);
         // uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ + dt² g M⁻¹f in one pass, written into
         // u_prev (uⁿ⁻¹ is no longer needed), then swapped.
         space.axpby_diag::<1>(2.0, &u_now, -1.0, &mut u_prev, -dt * dt, inv_diag, &ku, Some((dt * dt * g, &source)));

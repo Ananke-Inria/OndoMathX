@@ -57,6 +57,7 @@ harness = false
 
 [dependencies]
 ondomathx-mesh = { path = "../ondomathx-mesh", version = "0.1.0" }
+ondomathx-toolbox = { path = "../ondomathx-toolbox", version = "0.1.0" }
 nalgebra = "0.33"
 rayon = "1"
 sprs = "0.11"

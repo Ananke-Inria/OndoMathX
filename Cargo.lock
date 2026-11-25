@@ -626,6 +626,7 @@ dependencies = [
  "lobatto",
  "nalgebra 0.34.2",
  "ondomathx-mesh",
+ "ondomathx-toolbox",
  "rayon",
 ]
 
@@ -637,6 +638,7 @@ dependencies = [
  "nalgebra 0.33.3",
  "nalgebra-sparse",
  "ondomathx-mesh",
+ "ondomathx-toolbox",
  "rayon",
  "sprs",
 ]
@@ -646,6 +648,7 @@ name = "ondomathx-toolbox"
 version = "0.1.0"
 dependencies = [
  "ondomathx-mesh",
+ "rayon",
 ]
 
 [[package]]

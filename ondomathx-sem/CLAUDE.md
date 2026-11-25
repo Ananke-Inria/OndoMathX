@@ -194,14 +194,27 @@ cargo fmt
   2026-11-19). The library provides the building blocks (`ops.rs`); the time
   loops live in the examples (each example writes its own loop).
   `uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt²·M⁻¹·Σ_shared(K_loc uⁿ) + dt²·M⁻¹F(tⁿ)`.
-  `dt = 0.95·2/√ρ(M⁻¹K)`, estimated by power iteration (TetriX `lal.rs`).
+  `dt = 0.95·2/√ρ(M⁻¹K)`, estimated by power iteration
+  (`ondomathx_toolbox::lal::power_iteration`, formerly TetriX `lal.rs` and
+  this crate's `ops.rs`).
   - Building blocks (names since step 7): `Space::c_apply` (`mlt_add` with
     β = 0, then `c_sum_shared`), `InverseMass::apply::<C>` (from
     `c_inverse_mass`), `Space::scale_by::<C>` (one-value-per-node diagonal on C
     components), `Space::local_mass` (unassembled `c·w·|det J|`),
     `Space::mass_inner::<C>` (`Σ m·a·b`, the M product for continuous vectors),
-    `Space::c_multiplicity`, `Space::c_max_eigenvalue` (power iteration on
-    M⁻¹K, returns `EigenEstimate`), `dot`, `stable_dt(λ, safety)`.
+    `Space::c_multiplicity`, `Space::c_max_eigenvalue` (the toolbox's power
+    iteration on M⁻¹K, returns `ondomathx_toolbox::lal::EigenEstimate`
+    `{ lambda, n_iter, residue }`), `Space::axpby_diag::<C>` (the toolbox's
+    `lal::axpby_diag` with this space's `NLOC`:
+    `out ← a·x + b·out + c·(diag ⊙ y) + d·z` in one pass, the last term
+    optional: `M⁻¹` fused into the leapfrog update, used by the leapfrog
+    examples). `mass_inner` adds its per-element sums in element order
+    (reproducible, like the toolbox's sums: the CFL step no longer varies
+    between runs). Since 2026-11-25 `dot`, `power_iteration` and
+    `EigenEstimate` are in `ondomathx_toolbox::lal` (not re-exported), and the
+    examples take `ricker`, `gaussian`, `bump` from
+    `ondomathx_toolbox::signals`. No `stable_dt` (removed 2026-11-25): the
+    examples compute `dt = 0.95 · 2 / √λ_max` themselves.
   - Energies need no assembly: `⟨Ku, w⟩ = dot(K_loc u, w)` and
     `⟨u, w⟩_M = mass_inner(local_mass, u, w)` for continuous `u`, `w`.
   - Power iteration start: a hashed pseudo-random vector, averaged over the
@@ -420,11 +433,9 @@ dedicated implementation. This section revises "Method and storage" and
   4.588e-3 → 4.638e-3, the others ≤ 0.2 %), inside the 5 % safety margin;
   iterations 701 → 12 (square), 756 → 35 (cube), 18–35 elsewhere.
 - Shared toolbox `ondomathx-toolbox` (option (a): it depends on `ondomathx-mesh`,
-  behind a cargo feature; `ondomathx-mesh` stays independent). Contents to be decided:
-  power iteration, norms, `stable_dt`, parameter fields (generalized over a
-  point-context trait), shared-DOF CSR from a numbering, source signals
-  (Ricker, Gaussian, C∞ bump), low-level VTK/Vizir writers, test meshes,
-  study helpers.
+  behind a cargo feature; `ondomathx-mesh` stays independent). Its contents
+  and the API convergence with `ondomathx-tetrix` are decided in the
+  workspace CLAUDE.md, "API convergence" (2026-11-25).
 
 ## Defaults not covered by the interview (revisit freely)
 - The space is built from any `&impl Mesh` (since step 9) and does not borrow

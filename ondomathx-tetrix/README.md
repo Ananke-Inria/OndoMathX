@@ -4,7 +4,7 @@ Finite elements on tetrahedral meshes (formerly TetriX), with meshes from [`ondo
 
 - **Elements** (`finite_element`) — tetrahedral elements with 4, 5, 10, 14 and 15 nodes, including P2 Lagrange elements enriched with face and interior bubble functions, with their quadrature rules and local stiffness operators.
 - **P2 space** (`tetrix_p2_space`) — an isoparametric finite-element space on a tetrahedral mesh with duplicated (DG) storage, element coloring for race-free parallel application, global numbering, mass and stiffness (applied element by element, or assembled as a sparse matrix).
-- **Linear algebra** (`lal`) — mass-weighted norms and power iteration for the spectral radius of M⁻¹K.
+- **Shared tools** — the norms, the power iteration for the spectral radius of M⁻¹K and the source signals come from [`ondomathx-toolbox`](https://crates.io/crates/ondomathx-toolbox) (`lal`, `signals`).
 - **Output** — VTK (quadratic tetrahedra) and Vizir high-order solutions.
 
 The binary `TetriX` runs a scalar acoustic wave with a leapfrog scheme on the `Heart.mesh` asset of `ondomathx-mesh`:

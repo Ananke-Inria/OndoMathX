@@ -31,27 +31,13 @@ use ondomathx_sem::fields::Constant;
 use ondomathx_sem::kernels::{Divergence, IsotropicElastic};
 use ondomathx_sem::operators::{FusedKpQ4Q2, PressureMass2};
 use ondomathx_sem::{
-    power_iteration, stable_dt, GeoStorage, Gll, Iso2, Numbering, Quad2, Space, VizirWriter,
+    GeoStorage, Gll, Iso2, Numbering, Quad2, Space, VizirWriter,
     VtkField, VtkWriter,
 };
 use rayon::prelude::*;
 
-/// Ricker wavelet in time (C++ `Ricker(t, t0, s0)`).
-fn ricker(t: f64, t0: f64, s0: f64) -> f64 {
-    let t = t - t0;
-    (4.0 * s0 * s0 * t * t - 2.0 * s0) * (-t * t * s0).exp()
-}
-
-/// Smooth bump with compact support, 1 at `center`, 0 beyond `r0`
-/// (C++ `CInfty0(x, center, r0, s0)`).
-fn bump(x: [f64; 2], center: [f64; 2], r0: f64, s0: f64) -> f64 {
-    let r2 = (x[0] - center[0]).powi(2) + (x[1] - center[1]).powi(2);
-    if r2 >= r0 * r0 {
-        0.0
-    } else {
-        (s0 * r0 * r0 / (r2 - r0 * r0) + s0).exp()
-    }
-}
+use ondomathx_toolbox::lal::power_iteration;
+use ondomathx_toolbox::signals::{bump, ricker};
 
 /// The Gauss–Lobatto rule at the displacement nodes, used for `b(u, q)` when
 /// the pressure is written.
@@ -106,21 +92,19 @@ fn main() {
     //    power iteration on that composite operator.
     let m = disp.local_mass(&density);
     let eig = power_iteration(
-        disp.c_start_vector::<2>(),
-        |x, y| {
-            apply(x, y);
-            inv_mass.apply::<2>(y);
-        },
+        |y| inv_mass.apply::<2>(y),
+        |x, y| apply(x, y),
         |a, b| disp.mass_inner::<2>(&m, a, b),
-        5000,
+        disp.c_start_vector::<2>(),
         1e-3,
+        5000,
     );
-    let dt = stable_dt(eig.lambda, 0.95);
+    let dt = 0.95 * 2.0 / eig.lambda.sqrt(); // 95 % of the leapfrog limit 2 / √λ_max
     let t_end = 1.0;
     let steps = (t_end / dt).ceil() as usize;
     println!(
         "dt = {dt:.4e} ({} power iterations), {steps} steps",
-        eig.iterations
+        eig.n_iter
     );
 
     // 5. The source f(x) g(t), along x: `source` = M⁻¹F, F = ∫ f·φ_i.
@@ -158,7 +142,7 @@ fn main() {
         let t = step as f64 * dt;
         apply(&u_now, &mut au);
         inv_mass.apply::<2>(&mut au);
-        let g = ricker(t, 0.2, 500.0);
+        let g = ricker(t, 7.0, 0.2);
         u_prev
             .par_iter_mut()
             .zip(&u_now)

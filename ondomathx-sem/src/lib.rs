@@ -27,7 +27,6 @@ pub use element::{Batch, ElementOperator, PointSet};
 pub use engine::{PointIn, PointKernel, PointOut};
 pub use geometry::{cofactor, det, GeoStorage};
 pub use mixed::Pointwise;
-pub use ops::{dot, power_iteration, stable_dt, EigenEstimate};
 pub use quadrature::{Gl, Gll, Quad2, Quad3, Quadrature, Rule, Sweep};
 pub use shape::{Gll2, Gll3, Iso2, Iso3, Shape};
 pub use space::{GeoKind, InverseMass, Numbering, Space, SpaceBuilder};

@@ -1,30 +1,15 @@
 use ondomathx_tetrix::io_vizir;
 use ondomathx_tetrix::io_vtk;
-use ondomathx_tetrix::lal;
 use ondomathx_tetrix::tetrix_p2_space::TetriXP2Space;
 
 use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
+use ondomathx_toolbox::lal;
+use ondomathx_toolbox::signals::{gaussian, ricker, ricker_delay};
 
 use rayon::prelude::*;
 
 use std::fs;
 use std::time::Instant;
-
-// ---------------------------------------------------------------------------
-// Wave-shape functions
-// ---------------------------------------------------------------------------
-
-/// Gaussian: e^{-r²/σ²}
-fn gaussian(r: f64, sigma2: f64) -> f64 {
-    (-r * r / sigma2).exp()
-}
-
-/// Ricker wavelet (order 1) with peak frequency f0.
-/// Centre: t0 = 1/f0.
-fn ricker(t: f64, f0: f64) -> f64 {
-    let tau = std::f64::consts::PI * f0 * (t - 1.0 / f0);
-    (1.0 - 2.0 * tau * tau) * (-tau * tau).exp()
-}
 
 // ---------------------------------------------------------------------------
 // Main
@@ -98,19 +83,25 @@ fn main() {
     println!("Power iteration…");
     let t0 = Instant::now();
 
-    let (rho, pi_iters, pi_res) = lal::power_iteration(
+    // M inner product of two DG vectors: the copies of each global DoF
+    // averaged (exact for continuous vectors), weighted by the global mass.
+    let inner = |a: &[f64], b: &[f64]| {
+        let (mut a_cg, mut b_cg) = (vec![0.0_f64; n_dof], vec![0.0_f64; n_dof]);
+        fe_space.collect_avg_dg(a, &mut a_cg);
+        fe_space.collect_avg_dg(b, &mut b_cg);
+        a_cg.iter().zip(&b_cg).zip(&mass).map(|((x, y), m)| m * x * y).sum::<f64>()
+    };
+    let eig = lal::power_iteration(
         // Solve: M⁻¹ in-place on a DG vector
-        |v: &mut Vec<f64>| {
-            fe_space.mlt_inverse_mass(v, &mass);
-        },
+        |v| fe_space.mlt_inverse_mass(v, &mass),
         // MltAdd: K on a DG vector
-        |u: &Vec<f64>, v: &mut Vec<f64>| {
-            fe_space.mlt_stiffness_dg(u, v, 1.0);
-        },
-        n_dg,
+        |u, v| fe_space.mlt_stiffness_dg(u, v, 1.0),
+        inner,
+        lal::start_vector(n_dg),
         1e-7,
         200,
     );
+    let (rho, pi_iters, pi_res) = (eig.lambda, eig.n_iter, eig.residue);
 
     println!(
         "  ρ = {:.6e},  iters = {},  residue = {:.2e}  ({:.2?})",
@@ -160,7 +151,7 @@ fn main() {
 
         // 3. u_next = 2 u_n − u_{n-1} − dt² M⁻¹K u_n + dt² R(t^n) src
         //    Written into u_prev (no longer needed as u_{n-1}).
-        let rk = ricker(t, 0.20);
+        let rk = ricker(t, 0.20, ricker_delay(0.20));
         let dt2_rk = dt2 * rk;
 
         u_prev.par_iter_mut().enumerate().for_each(|(k, prev)| {

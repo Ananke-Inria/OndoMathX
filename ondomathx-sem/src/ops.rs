@@ -6,43 +6,22 @@
 //! a    = M⁻¹ (F − K uⁿ)                      // c_apply + InverseMass::apply
 //! uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ + dt² a
 //! ```
-//! ([`Space::axpby_diag`] does `M⁻¹` and the update in one pass, after
-//! `c_apply`.)
-//! with `dt = stable_dt(λ_max(M⁻¹K), 0.95)`. For continuous vectors the
+//! with `dt = 0.95 · 2 / √λ_max(M⁻¹K)` (95 % of the leapfrog limit, `λ_max`
+//! from [`Space::c_max_eigenvalue`] or `ondomathx_toolbox::lal::power_iteration`);
+//! [`Space::axpby_diag`] does `M⁻¹` and the update in one pass, after
+//! `c_apply`. For continuous vectors the
 //! duplicated storage needs no assembly to evaluate energies:
-//! `⟨K u, w⟩ = dot(K_loc u, w)` with `K_loc u` from [`Space::mlt_add`], and
+//! `⟨K u, w⟩ = dot(K_loc u, w)` with `K_loc u` from [`Space::mlt_add`] and
+//! `dot` from `ondomathx_toolbox::lal`, and
 //! `⟨u, w⟩_M = mass_inner(local_mass, u, w)`.
 
+use ondomathx_toolbox::lal::{self, EigenEstimate};
 use rayon::prelude::*;
 
 use crate::engine::PointKernel;
 use crate::fields::Field;
 use crate::shape::Shape;
 use crate::space::Space;
-
-/// Largest stable leapfrog step for `M ü + K u = 0`: `safety · 2 / √λ_max`,
-/// with `λ_max` the largest eigenvalue of `M⁻¹K`.
-pub fn stable_dt(lambda_max: f64, safety: f64) -> f64 {
-    assert!(lambda_max > 0.0, "λ_max must be positive ({lambda_max})");
-    safety * 2.0 / lambda_max.sqrt()
-}
-
-/// Plain dot product of two duplicated vectors (parallel).
-pub fn dot(a: &[f64], b: &[f64]) -> f64 {
-    assert_eq!(a.len(), b.len(), "vector lengths");
-    a.par_iter().zip(b).map(|(x, y)| x * y).sum()
-}
-
-/// Result of [`Space::c_max_eigenvalue`].
-#[derive(Clone, Copy, Debug)]
-pub struct EigenEstimate {
-    /// Rayleigh quotient of the last iterate: a lower bound of `λ_max`.
-    pub lambda: f64,
-    /// Iterations performed.
-    pub iterations: usize,
-    /// Relative change of `lambda` at the last iteration.
-    pub rel_change: f64,
-}
 
 impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// Assembled operator of the continuous space: `out = Σ_shared(K_loc u)`,
@@ -68,17 +47,14 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     }
 
     /// `out ← a·x + b·out + c·(diag ⊙ y) + d·z` in one pass, for `C`-component
-    /// vectors, `diag` one value per duplicated node shared by the components
-    /// (as in [`Space::scale_by`]); the last term is `z = Some((d, z))`, or
-    /// absent with `None`. With `diag` the inverse mass
-    /// ([`crate::InverseMass::diagonal`]) it fuses `M⁻¹` into the update of
-    /// an explicit scheme: the leapfrog step
-    /// `uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ + dt² g(tⁿ) M⁻¹f`, written into `u_prev`
-    /// from `ku = K uⁿ` and the precomputed source `minv_f = M⁻¹f`, is
+    /// vectors of this space, `diag` one value per duplicated node shared by
+    /// the components (as in [`Space::scale_by`]): `ondomathx_toolbox::lal::axpby_diag`
+    /// with this space's `NLOC`. With `diag` the inverse mass
+    /// ([`crate::InverseMass::diagonal`]) it fuses `M⁻¹` into the leapfrog
+    /// update `uⁿ⁺¹ = 2uⁿ − uⁿ⁻¹ − dt² M⁻¹K uⁿ + dt² g(tⁿ) M⁻¹f`, written into
+    /// `u_prev` from `ku = K uⁿ` and `minv_f = M⁻¹f`:
     /// `axpby_diag(2.0, &u_now, -1.0, &mut u_prev, -dt * dt, inv_m, &ku,
-    /// Some((dt * dt * g, &minv_f)))`, the same floating-point operations as
-    /// `M⁻¹` applied to `ku` and then the update. As in [`Space::mlt_add`],
-    /// `b = 0` never reads `out`.
+    /// Some((dt * dt * g, &minv_f)))`. `b = 0` never reads `out`.
     #[allow(clippy::too_many_arguments)]
     pub fn axpby_diag<const C: usize>(
         &self,
@@ -91,35 +67,8 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
         y: &[f64],
         z: Option<(f64, &[f64])>,
     ) {
-        let nloc = Self::NLOC;
-        let block = C * nloc;
         assert_eq!(diag.len(), self.n_dup(), "diagonal length");
-        assert_eq!(x.len(), self.n_dup() * C, "x length");
-        assert_eq!(y.len(), self.n_dup() * C, "y length");
-        assert_eq!(out.len(), self.n_dup() * C, "out length");
-        if let Some((_, z)) = z {
-            assert_eq!(z.len(), self.n_dup() * C, "z length");
-        }
-        out.par_chunks_mut(block).enumerate().for_each(|(e, ob)| {
-            let dg = &diag[e * nloc..(e + 1) * nloc];
-            for (k, o) in ob.chunks_exact_mut(nloc).enumerate() {
-                let r = e * block + k * nloc..e * block + (k + 1) * nloc;
-                let (xc, yc) = (&x[r.clone()], &y[r.clone()]);
-                let it = o.iter_mut().zip(xc).zip(yc).zip(dg);
-                match (b == 0.0, z) {
-                    (true, None) => it.for_each(|(((o, &xv), &yv), &dv)| *o = a * xv + c * (dv * yv)),
-                    (false, None) => {
-                        it.for_each(|(((o, &xv), &yv), &dv)| *o = a * xv + b * *o + c * (dv * yv))
-                    }
-                    (true, Some((d, z))) => it.zip(&z[r]).for_each(|((((o, &xv), &yv), &dv), &zv)| {
-                        *o = a * xv + c * (dv * yv) + d * zv
-                    }),
-                    (false, Some((d, z))) => it.zip(&z[r]).for_each(|((((o, &xv), &yv), &dv), &zv)| {
-                        *o = a * xv + b * *o + c * (dv * yv) + d * zv
-                    }),
-                }
-            }
-        });
+        lal::axpby_diag::<C>(Self::NLOC, a, x, b, out, c, diag, y, z);
     }
 
     /// `Σ_dup m · a·b` over the duplicated nodes and the `C` components. With
@@ -144,7 +93,9 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
                 }
                 s
             })
-            .sum()
+            .collect::<Vec<f64>>()
+            .iter()
+            .sum() // per-element sums added in element order: reproducible
     }
 
     /// Fixed pseudo-random continuous `C`-component vector (a hash of the copy
@@ -177,9 +128,10 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
 
     /// Largest eigenvalue of `M⁻¹K` on the continuous space by power iteration,
     /// `K` the operator of `kernel` and `M` the lumped mass of coefficient
-    /// `mass`: [`power_iteration`] from [`Space::c_start_vector`], with
-    /// `x ↦ M⁻¹ Σ_shared(K_loc x)` and the GLL mass product. Panics without the
-    /// continuous numbering.
+    /// `mass`: `ondomathx_toolbox::lal::power_iteration` from
+    /// [`Space::c_start_vector`], with `K x = Σ_shared(K_loc x)`, the inverse
+    /// lumped mass and the GLL mass product. Panics without the continuous
+    /// numbering.
     pub fn c_max_eigenvalue<const C: usize>(
         &self,
         kernel: &impl PointKernel<D, C>,
@@ -189,61 +141,15 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     ) -> EigenEstimate {
         let m = self.local_mass(mass);
         let inv_m = self.c_inverse_mass(mass);
-        power_iteration(
-            self.c_start_vector::<C>(),
-            |x, y| {
-                self.c_apply::<C>(kernel, x, y);
-                inv_m.apply::<C>(y);
-            },
+        lal::power_iteration(
+            |y| inv_m.apply::<C>(y),
+            |x, y| self.c_apply::<C>(kernel, x, y),
             |a, b| self.mass_inner::<C>(&m, a, b),
-            max_iter,
+            self.c_start_vector::<C>(),
             rtol,
+            max_iter,
         )
     }
-}
-
-/// Largest eigenvalue of `M⁻¹A` (`A` symmetric, `M` symmetric positive
-/// definite) by power iteration.
-///
-/// - `apply(x, y)` writes `y = M⁻¹A x` (any composite operator, e.g.
-///   `M⁻¹(R + λ Bᵀ (M^P)⁻¹ B)`); `y` is overwritten.
-/// - `inner(a, b)` is the `M` inner product `⟨a, b⟩_M`.
-///
-/// Each iterate is `M`-normalized; the estimate is the Rayleigh quotient
-/// `⟨x, M⁻¹A x⟩_M = ⟨x, A x⟩` (a lower bound of `λ_max`, monotone for
-/// symmetric `A`). Stops when its relative change drops below `rtol`, or after
-/// `max_iter` iterations. Same role as `ondomathx-tetrix`'s `lal::power_iteration`, which
-/// takes `A` and `M⁻¹` separately and estimates with the ∞-norm ratio.
-pub fn power_iteration(
-    mut x: Vec<f64>,
-    mut apply: impl FnMut(&[f64], &mut [f64]),
-    inner: impl Fn(&[f64], &[f64]) -> f64,
-    max_iter: usize,
-    rtol: f64,
-) -> EigenEstimate {
-    let norm = inner(&x, &x).sqrt();
-    assert!(norm > 0.0, "power iteration: zero start vector");
-    x.par_iter_mut().for_each(|v| *v /= norm);
-    let mut y = vec![0.0; x.len()];
-    let mut est = EigenEstimate {
-        lambda: 0.0,
-        iterations: 0,
-        rel_change: f64::INFINITY,
-    };
-    for it in 1..=max_iter {
-        apply(&x, &mut y);
-        let lambda = inner(&x, &y);
-        est.rel_change = (lambda - est.lambda).abs() / lambda.abs();
-        est.lambda = lambda;
-        est.iterations = it;
-        if est.rel_change < rtol {
-            break;
-        }
-        let norm = inner(&y, &y).sqrt();
-        y.par_iter_mut().for_each(|v| *v /= norm);
-        std::mem::swap(&mut x, &mut y);
-    }
-    est
 }
 
 /// `v[e][c][node] *= diag[e·nloc + node]` for every component: the body of

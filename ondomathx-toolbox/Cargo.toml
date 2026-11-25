@@ -15,3 +15,4 @@ mesh = ["dep:ondomathx-mesh"]
 
 [dependencies]
 ondomathx-mesh = { path = "../ondomathx-mesh", version = "0.1.0", optional = true }
+rayon = "1"
