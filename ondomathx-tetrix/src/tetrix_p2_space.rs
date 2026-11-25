@@ -1,6 +1,7 @@
+use anamesh::mesh::{DoFSet, Mesh, UnstructuredMesh, TETRAHEDRON};
 use nalgebra::{Matrix3, Vector3};
 use rayon::prelude::*;
-use rouage::mesh::{DoFSet, Mesh, UnstructuredMesh, TETRAHEDRON};
+use sprs::{CsMat, TriMat};
 
 use crate::finite_element::{tet_14, tet_15, tet_15_14};
 
@@ -166,10 +167,10 @@ impl<'a> TetriXP2Space<'a> {
         }
 
         // Element coloring (mesh.coloring is indexed by local 3-D element index)
-        let n_color = mesh.n_colors;
+        let n_color = mesh.get_ncolors();
         let mut elem_by_color: Vec<Vec<usize>> = vec![vec![]; n_color];
         for el in 0..n_elem {
-            let color = mesh.coloring[el];
+            let color = mesh.get_element_color(el);
             elem_by_color[color].push(el);
         }
 
@@ -272,6 +273,30 @@ impl<'a> TetriXP2Space<'a> {
     // -----------------------------------------------------------------------
     // Assembly
     // -----------------------------------------------------------------------
+
+    /// Assembles the global stiffness matrix as a sparse CSR matrix.
+    ///
+    /// K[I, J] = Σ_{el} Σ_{i,j} α · |J_el| · k_loc[i,j]
+    ///
+    /// where the sum over (i,j) runs over local DoF pairs with loc2glob(el,i)=I
+    /// and loc2glob(el,j)=J, and k_loc is the local stiffness matrix on the
+    /// reference element scaled by `sym_grad_def_origin` (which already absorbs
+    /// the Jacobian factor).
+    pub fn assemble_stiffness(&self, alpha: f64) -> CsMat<f64> {
+        let mut triplets: TriMat<f64> = TriMat::new((self.n_dof, self.n_dof));
+
+        for el in 0..self.n_elem {
+            let k_loc = tet_15::build_local_stiffness(&self.sym_grad_def_origin[el]);
+            let loc2glob = &self.loc2glob[el];
+            for i in 0..N_LOC_DOF {
+                for j in 0..N_LOC_DOF {
+                    triplets.add_triplet(loc2glob[i], loc2glob[j], alpha * k_loc[(i, j)]);
+                }
+            }
+        }
+
+        triplets.to_csr()
+    }
 
     pub fn assemble_mass(&self, mass: &mut Vec<f64>, alpha: f64) {
         for i_elt in 0..self.n_elem {

@@ -475,7 +475,7 @@ pub fn mlt_stiffness(input: &[f64; 15], sym_grad: &Matrix3<f64>, output: &mut [f
 ///   Equivalently: weight `9/20` applied to `(A · n_flux) · ∇φ_i(centroid_face)`,
 ///   where `n_flux = n̂ · area`, where centroid_face is the centtroid of the face.
 ///
-/// - **K_BB (bubble × bubble):** exact, via the precomputed basis matrices `KBB_00..KBB_22`.
+/// - **K_BB (bubble × bubble):** computed using the 14points quadrature, via the precomputed basis matrices `KBB_00..KBB_22`.
 pub fn mlt_stiffness_opt(input: &[f64; 15], sym_grad: &Matrix3<f64>, output: &mut [f64; 15]) {
     let input_p2: &[f64; 10] = input[..10].try_into().unwrap();
 

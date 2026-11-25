@@ -117,10 +117,10 @@ fn bench_15_to_10b(c: &mut Criterion) {
 
 // Benchmark results for mlt_stiffness  (15→15)  — Apple M-series, release build:
 //
-//   tet_15  (mlt_stiffness)          121 ns
-//   tet_15  (mlt_stiffness_opt)       33 ns  ← 3.7× faster (via tet_10b basis + 2 conversions)
-//   tet_10b (mlt_stiffness)          436 ns
-//   tet_10b (mlt_stiffness_opt)       23 ns  ← 5.3× faster than tet_15::mlt_stiffness
+//   tet_15  (mlt_stiffness)          126 ns
+//   tet_15  (mlt_stiffness_opt)       39 ns  ← 3.2× faster (via tet_10b basis + 2 conversions)
+//   tet_10b (mlt_stiffness)          430 ns
+//   tet_10b (mlt_stiffness_opt)       33 ns  ← 3.8× faster than tet_15::mlt_stiffness
 //   nalgebra K·v  (prebuilt 15×15)    19 ns  ← reference: prebuilt matrix-vector product
 fn bench_mlt_stiffness(c: &mut Criterion) {
     let sym_grad = Matrix3::new(2.0, 0.5, 0.1, 0.5, 3.0, 0.2, 0.1, 0.2, 1.5);

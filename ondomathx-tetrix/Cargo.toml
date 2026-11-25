@@ -23,6 +23,7 @@ path = "src/bin/gen_mat_15_14.rs"
 name = "gen_mat_10b"
 path = "src/bin/gen_mat_10b.rs"
 
+
 [[bench]]
 name = "tet_15_14"
 harness = false
@@ -49,10 +50,13 @@ name = "tetrix_p2_space"
 harness = false
 
 [dependencies]
-rouage = { path = "../Rouage" }
+anamesh = { path = "../Anamesh" }
 nalgebra = "0.33"
 rayon = "1"
+sprs = "0.11"
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
 nalgebra = "0.33"
+nalgebra-sparse = "0.10"
+sprs = "0.11"

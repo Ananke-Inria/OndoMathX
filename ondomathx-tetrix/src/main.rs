@@ -3,7 +3,7 @@ use tetrix::io_vtk;
 use tetrix::lal;
 use tetrix::tetrix_p2_space::TetriXP2Space;
 
-use rouage::mesh::{Mesh, UnstructuredMesh};
+use anamesh::mesh::{Mesh, UnstructuredMesh};
 
 use rayon::prelude::*;
 
@@ -158,7 +158,7 @@ fn main() {
         // 2. M⁻¹: collect DG→CG, divide by diagonal mass, scatter CG→DG
         fe_space.mlt_inverse_mass(&mut ku_dg, &mass);
 
-        // 3. u_next = 2 u_n − u_{n-1} − dt² M⁻¹K u_n + dt² R(t) src
+        // 3. u_next = 2 u_n − u_{n-1} − dt² M⁻¹K u_n + dt² R(t^n) src
         //    Written into u_prev (no longer needed as u_{n-1}).
         let rk = ricker(t, 0.20);
         let dt2_rk = dt2 * rk;
