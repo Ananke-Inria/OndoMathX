@@ -166,11 +166,12 @@ impl<'a> TetriXP2Space<'a> {
             }
         }
 
-        // Element coloring (mesh.coloring is indexed by local 3-D element index)
+        // Element coloring: get_element_color takes the mesh element index,
+        // `el` is the local index among the tetrahedra.
         let n_color = mesh.get_ncolors();
         let mut elem_by_color: Vec<Vec<usize>> = vec![vec![]; n_color];
         for el in 0..n_elem {
-            let color = mesh.get_element_color(el);
+            let color = mesh.get_element_color(elements[el]);
             elem_by_color[color].push(el);
         }
 
