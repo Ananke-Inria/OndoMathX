@@ -1,6 +1,6 @@
-# Anamesh
+# ondomathx-mesh
 
-Anamesh is a Rust library for finite element mesh handling. It provides the building
+`ondomathx-mesh` (formerly Anamesh) is a Rust library for finite element mesh handling. It provides the building
 blocks needed to go from a mesh file or a parametric mesh description to a global DOF
 numbering ready for finite element assembly:
 
@@ -19,8 +19,8 @@ numbering ready for finite element assembly:
 ## Quick start
 
 ```rust
-use anamesh::mesh::square::*;
-use anamesh::mesh::Mesh;
+use ondomathx_mesh::mesh::square::*;
+use ondomathx_mesh::mesh::Mesh;
 
 // Structured 3×3 quad mesh on [0,1]²
 let square = Square::new([0.0, 0.0], 1.0, 1.0, 3, 3, None, None);

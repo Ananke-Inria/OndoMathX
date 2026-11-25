@@ -5,6 +5,9 @@ description = "Meshes, geometric maps, labels and DOF numbering for the OndoMath
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
+keywords = ["mesh", "finite-element", "gmsh", "medit", "dof-numbering"]
+categories = ["mathematics", "science", "simulation"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

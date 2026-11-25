@@ -5,6 +5,9 @@ description = "Shared tools of the OndoMathX crates."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
+keywords = ["finite-element", "numerics"]
+categories = ["mathematics", "science", "simulation"]
 
 [features]
 # Tools that need meshes (test meshes, I/O on a mesh).

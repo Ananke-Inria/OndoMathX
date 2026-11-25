@@ -22,7 +22,7 @@ Rules:
 - One `Cargo.lock` and one `target/` at the root. Commit from the root.
 - History: the three former repositories were imported with their history
   (2026-11-25, `git filter-repo --to-subdirectory-filter`); `Thorax.mesh` was
-  removed from the imported history (not publishable). The former repositories
-  stay private and are archived.
+  removed from the imported history. The former repositories (Anamesh,
+  LobattoX, TetriX) are deleted once the migration is complete.
 
 Commands: `cargo test --workspace --release`, `cargo clippy --workspace --all-targets`.

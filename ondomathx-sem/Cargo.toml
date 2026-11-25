@@ -5,6 +5,9 @@ description = "Matrix-free spectral elements on quadrangle and hexahedron meshes
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
+keywords = ["spectral-element", "finite-element", "matrix-free", "wave-equation", "gauss-lobatto"]
+categories = ["mathematics", "science", "simulation"]
 
 [dependencies]
 # ondomathx-mesh: same workspace (path + version, for publishing).

@@ -1,9 +1,13 @@
 [package]
 name = "ondomathx-tetrix"
 version = "0.1.0"
+description = "Finite elements on tetrahedral meshes: elements with 4 to 15 nodes, a P2 space with duplicated storage, VTK and Vizir output."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
+keywords = ["finite-element", "tetrahedron", "wave-equation", "simulation"]
+categories = ["mathematics", "science", "simulation"]
 
 [[bin]]
 name = "TetriX"
