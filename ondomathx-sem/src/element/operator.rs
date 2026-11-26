@@ -20,7 +20,7 @@ use nalgebra::{SMatrix, SVector};
 use rayon::prelude::*;
 
 use crate::geometry::PointGeo;
-use crate::shape::Shape;
+use crate::element::shape::Shape;
 use crate::space::{GeoKind, Space};
 
 /// A set of reference points of the elements with its weights and geometry:

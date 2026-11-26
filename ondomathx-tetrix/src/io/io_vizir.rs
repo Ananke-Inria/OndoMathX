@@ -8,9 +8,9 @@ use std::path::Path;
 use ondomathx_mesh::mesh::UnstructuredMesh;
 use ondomathx_toolbox::io_vizir::HoSolution;
 
-use crate::tetrix_p2_space::{TetriXP2Space, ORDER};
+use crate::space::p2_plus::{P2PlusSpace, ORDER};
 
-/// Writer of Vizir `.sol` files for one [`TetriXP2Space`].
+/// Writer of Vizir `.sol` files for one [`P2PlusSpace`].
 pub struct VizirWriter {
     sol: HoSolution,
     /// Global DoF of each P2 node of each element, `[elem][node]`.
@@ -22,7 +22,7 @@ pub struct VizirWriter {
 impl VizirWriter {
     /// Formats the header and the P2 node positions (barycentric) of
     /// `fe_space`, built on `mesh`.
-    pub fn new(fe_space: &TetriXP2Space, _mesh: &UnstructuredMesh) -> Self {
+    pub fn new(fe_space: &P2PlusSpace, _mesh: &UnstructuredMesh) -> Self {
         let nloc = fe_space.num_loc_p2_dofs();
         let positions: Vec<Vec<f64>> = (0..nloc)
             .map(|i| fe_space.get_barycentric_coordinates(fe_space.loc_dof_coordinates(i)).to_vec())
@@ -56,7 +56,7 @@ impl VizirWriter {
 
 /// Write a Vizir `.sol` file for a scalar or vector solution, to
 /// `{file_name}.{n:05}.sol` (a [`VizirWriter`] built for this one file).
-pub fn write_solution(file_name: &str, fe_space: &TetriXP2Space, mesh: &UnstructuredMesh, solution: &[f64], n: usize) {
+pub fn write_solution(file_name: &str, fe_space: &P2PlusSpace, mesh: &UnstructuredMesh, solution: &[f64], n: usize) {
     let dim_sol = solution.len() / fe_space.num_dofs();
     let file_path = format!("{}.{:05}.sol", file_name, n);
     VizirWriter::new(fe_space, mesh)

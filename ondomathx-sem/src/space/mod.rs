@@ -25,8 +25,8 @@ use nalgebra::{SMatrix, SVector};
 use rayon::prelude::*;
 
 use crate::geometry::{GeoStorage, PointGeo};
-use crate::quadrature::Sweep;
-use crate::shape::Shape;
+use crate::element::quadrature::Sweep;
+use crate::element::shape::Shape;
 
 /// Geometric type of an element; storage holds one contiguous group per kind,
 /// in the order [`GeoKind::ALL`].

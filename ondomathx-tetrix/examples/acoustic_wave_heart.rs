@@ -1,8 +1,21 @@
-use ondomathx_tetrix::io_vizir;
-use ondomathx_tetrix::io_vtk;
-use ondomathx_tetrix::tetrix_p2_space::TetriXP2Space;
+//! Scalar acoustic wave on the heart mesh (`ondomathx-mesh/assets/Heart.mesh`),
+//! P2 + bubble elements with DG storage, leapfrog in time, a Gaussian source
+//! with a Ricker wavelet in time.
+//!
+//! ```text
+//! cargo run --release --example acoustic_wave_heart
+//! ```
+//! Output in `out/acoustic_wave_heart/` (git-ignored): the mesh, the source
+//! and every time unit a snapshot for ParaView (`.vtk`) and for Vizir
+//! (`.sol`, listed in `wave.sols`); the run ends with the Vizir command.
+
+use ondomathx_toolbox::field::Constant;
+use ondomathx_tetrix::io::io_vizir;
+use ondomathx_tetrix::io::io_vtk;
+use ondomathx_tetrix::space::p2_plus::P2PlusSpace;
 
 use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
+use ondomathx_toolbox::io_vizir::write_sols;
 use ondomathx_toolbox::lal;
 use ondomathx_toolbox::signals::{gaussian, ricker, ricker_delay};
 
@@ -31,7 +44,7 @@ fn main() {
     // -----------------------------------------------------------------------
     // FE space
     // -----------------------------------------------------------------------
-    let fe_space = TetriXP2Space::new(&mesh);
+    let fe_space = P2PlusSpace::new(&mesh);
     let n_dof = fe_space.num_dofs();
     let n_elem = fe_space.num_elements();
     let n_loc = fe_space.num_loc_dofs(); // 15
@@ -47,7 +60,7 @@ fn main() {
     // Diagonal mass matrix (assembled in CG, size n_dof)
     // -----------------------------------------------------------------------
     let mut mass = vec![0.0_f64; n_dof];
-    fe_space.assemble_mass(&mut mass, 1.0);
+    fe_space.assemble_mass(&Constant(1.0), &mut mass, 1.0);
 
     // -----------------------------------------------------------------------
     // Source: Gaussian centred at (20, 70, 70) in CG, then scattered to DG
@@ -57,18 +70,23 @@ fn main() {
         let xyz = fe_space.dof_coordinate(i);
         let r =
             ((xyz[0] - 20.0).powi(2) + (xyz[1] - 70.0).powi(2) + (xyz[2] - 70.0).powi(2)).sqrt();
-        source_cg[i] = gaussian(r, 100.0);
+        source_cg[i] = gaussian(r, 400.0);
     }
     let mut source_dg: Vec<f64> = vec![0.0_f64; n_dg];
     fe_space.scatter_cg(&source_cg, &mut source_dg);
 
     let source_norm = lal::mass_norm(&source_cg, &mass);
 
-    fs::create_dir_all("output").unwrap();
-    io_vtk::write_vtk("output/source.vtk", &fe_space, &source_cg);
-    io_vizir::write_solution("output/source", &fe_space, &mesh, &source_cg, 0);
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("out/acoustic_wave_heart");
+    fs::create_dir_all(&dir).unwrap();
+    let out = |name: &str| dir.join(name).to_str().unwrap().to_string();
+    // The mesh for Vizir (the .sol files refer to its tetrahedra).
+    mesh.write_mesh(&out("heart.mesh")).unwrap();
+    io_vtk::write_vtk(&out("source.vtk"), &fe_space, &source_cg);
+    io_vizir::write_solution(&out("source"), &fe_space, &mesh, &source_cg, 0);
     println!(
-        "  Source written to output/source.vtk  ||source||_M = {:.6e}",
+        "  Source written to {}  ||source||_M = {:.6e}",
+        out("source.vtk"),
         source_norm
     );
 
@@ -94,7 +112,7 @@ fn main() {
         // Solve: M⁻¹ in-place on a DG vector
         |v| fe_space.mlt_inverse_mass(v, &mass),
         // MltAdd: K on a DG vector
-        |u, v| fe_space.mlt_stiffness_dg(u, v, 1.0),
+        |u, v| fe_space.mlt_stiffness_dg(&Constant(1.0), u, v, 1.0),
         inner,
         lal::start_vector(n_dg),
         1e-7,
@@ -149,7 +167,7 @@ fn main() {
         let dt2 = dt * dt;
 
         // 1. K u_curr  (element-local, parallel, result in DG)
-        fe_space.mlt_stiffness_dg(&u_curr, &mut ku_dg, 1.0);
+        fe_space.mlt_stiffness_dg(&Constant(1.0), &u_curr, &mut ku_dg, 1.0);
 
         // 2. Assembly: every copy receives the sum of its DoF's copies
         fe_space.sum_shared(&mut ku_dg);
@@ -178,9 +196,9 @@ fn main() {
             let mut u_cg = vec![0.0_f64; n_dof];
             fe_space.collect_avg_dg(&u_curr, &mut u_cg);
             let u_norm = lal::mass_norm(&u_cg, &mass);
-            let path = format!("output/wave.{:04}.vtk", n_out);
+            let path = out(&format!("wave.{:04}.vtk", n_out));
             io_vtk::write_vtk(&path, &fe_space, &u_cg);
-            io_vizir::write_solution("output/wave", &fe_space, &mesh, &u_cg, n_out);
+            io_vizir::write_solution(&out("wave"), &fe_space, &mesh, &u_cg, n_out);
             println!(
                 "  step {:6}  t = {:8.3}  ||u||_M = {:.6e}  ||src||_M = {:.6e}  → {}",
                 i_step,
@@ -198,4 +216,12 @@ fn main() {
         n_out,
         tloop.elapsed()
     );
+
+    // Vizir: the time series (`.sols`) and the command that opens it.
+    let sols: Vec<String> = (0..n_out).map(|k| format!("wave.{k:05}.sol")).collect();
+    write_sols(dir.join("wave.sols"), &sols).unwrap();
+    // Vizir adds the solution on the boundary faces (the .sol files hold the
+    // volume elements only; `Checksurf`, user guide 7.10).
+    fs::write(dir.join("default.vizir"), "Checksurf\n1\n").unwrap();
+    println!("cd {} && vizir4 -in heart.mesh -sol wave.00000.sol -sols wave.sols", dir.display());
 }

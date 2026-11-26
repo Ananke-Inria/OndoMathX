@@ -6,7 +6,7 @@ mod common;
 use std::f64::consts::PI;
 
 use common::*;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::AcousticStiffness;
 use ondomathx_sem::{GeoStorage, Gl, Iso2, Numbering, Quad2, Space};
 

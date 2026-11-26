@@ -5,9 +5,9 @@ use std::any::{type_name, Any, TypeId};
 
 use rayon::prelude::*;
 
-use crate::element::PointSet;
-use crate::quadrature::Sweep;
-use crate::shape::Shape;
+use crate::element::operator::PointSet;
+use crate::element::quadrature::Sweep;
+use crate::element::shape::Shape;
 
 use super::{QuadEntry, Space};
 

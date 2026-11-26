@@ -5,7 +5,7 @@
 use ondomathx_mesh::mesh::Mesh;
 use ondomathx_toolbox::numbering::DgMap;
 
-use crate::shape::Shape;
+use crate::element::shape::Shape;
 
 use super::Space;
 

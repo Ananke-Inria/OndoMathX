@@ -6,7 +6,7 @@ mod common;
 use ondomathx_mesh::mesh::square::Square;
 use ondomathx_mesh::mesh::Mesh;
 use common::*;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::{Divergence, DivergenceTranspose};
 use ondomathx_sem::operators::FusedKp;
 use ondomathx_sem::{GeoStorage, Gl, Gll, Iso2, Iso3, Numbering, Quad2, Quad3, Shape, Space, Sweep};

@@ -3,7 +3,7 @@ mod common;
 use ondomathx_mesh::mesh::square::Square;
 use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
 use common::*;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::{GeoKind, Gll2, Gll3, Iso2, Iso3, Numbering, Shape, Space};
 
 // ── Helpers ────────────────────────────────────────────────────────────

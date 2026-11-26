@@ -1,6 +1,6 @@
 [package]
 name = "ondomathx-tetrix"
-version = "0.2.0"
+version = "0.3.0"
 description = "Finite elements on tetrahedral meshes: elements with 4 to 15 nodes, a P2 space with duplicated storage, VTK and Vizir output."
 edition.workspace = true
 license.workspace = true
@@ -9,26 +9,24 @@ readme = "README.md"
 keywords = ["finite-element", "tetrahedron", "wave-equation", "simulation"]
 categories = ["mathematics", "science", "simulation"]
 
-[[bin]]
-name = "TetriX"
-path = "src/main.rs"
 
-[[bin]]
+# Code generators of the hard-coded tables of element/ (developer
+# tools, not installed): cargo run --example gen_mat_10_4, ….
+[[example]]
 name = "gen_mat_10_4"
-path = "src/bin/gen_mat_10_4.rs"
+path = "tools/gen_mat_10_4.rs"
 
-[[bin]]
+[[example]]
 name = "gen_mat_10_5"
-path = "src/bin/gen_mat_10_5.rs"
+path = "tools/gen_mat_10_5.rs"
 
-[[bin]]
+[[example]]
 name = "gen_mat_15_14"
-path = "src/bin/gen_mat_15_14.rs"
+path = "tools/gen_mat_15_14.rs"
 
-[[bin]]
+[[example]]
 name = "gen_mat_10b"
-path = "src/bin/gen_mat_10b.rs"
-
+path = "tools/gen_mat_10b.rs"
 
 [[bench]]
 name = "tet_15_14"
@@ -52,12 +50,12 @@ name = "tet_15_10b"
 harness = false
 
 [[bench]]
-name = "tetrix_p2_space"
+name = "p2_plus"
 harness = false
 
 [dependencies]
 ondomathx-mesh = { path = "../ondomathx-mesh", version = "0.1.0" }
-ondomathx-toolbox = { path = "../ondomathx-toolbox", version = "0.1.1" }
+ondomathx-toolbox = { path = "../ondomathx-toolbox", version = "0.1.2" }
 nalgebra = "0.34"
 rayon = "1"
 sprs = "0.11"

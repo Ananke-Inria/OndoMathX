@@ -1,4 +1,4 @@
-/// Code generator for the K_BB basis stiffness matrices used in `finite_element/tet_10b.rs`.
+/// Code generator for the K_BB basis stiffness matrices used in `element/tet_10b.rs`.
 ///
 /// Computes 6 symmetric 5×5 matrices:
 ///   KBB_AB[p][q] = ∫_T A_AB ∇φ_{10+p} · ∇φ_{10+q} dV
@@ -8,9 +8,9 @@
 ///   K_BB = a00·KBB_00 + a01·KBB_01 + a02·KBB_02 + a11·KBB_11 + a12·KBB_12 + a22·KBB_22
 ///
 /// Runs with:
-///   cargo run --bin gen_mat_10b
+///   cargo run --example gen_mat_10b
 
-use ondomathx_tetrix::finite_element::{tet_10b, tet_14};
+use ondomathx_tetrix::element::{tet_10b, tet_14};
 
 const ZERO_THRESHOLD: f64 = 1e-15;
 

@@ -594,7 +594,7 @@ dependencies = [
 
 [[package]]
 name = "ondomathx-sem"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "lobatto",
  "nalgebra",
@@ -605,7 +605,7 @@ dependencies = [
 
 [[package]]
 name = "ondomathx-tetrix"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "nalgebra",
@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "ondomathx-toolbox"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ondomathx-mesh",
  "ondomathx-sem",

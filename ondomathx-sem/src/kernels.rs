@@ -1,7 +1,7 @@
 //! Point kernels of the v1 physics (second-order, one field).
 //!
 //! - Acoustics, pressure `p`: `(1/κ) p̈ − div((1/ρ) ∇p) = f`. Stiffness
-//!   [`AcousticStiffness`], mass coefficient `1/κ` ([`crate::fields::Inverse`]).
+//!   [`AcousticStiffness`], mass coefficient `1/κ` (e.g. `Constant(1.0 / kappa)`).
 //! - Elastodynamics, displacement `u`: `ρ ü − div σ(u) = f`, isotropic
 //!   `σ = λ tr(ε) I + 2μ ε`. Stiffness [`IsotropicElastic`], mass coefficient `ρ`.
 //!
@@ -27,7 +27,7 @@
 use nalgebra::SMatrix;
 
 use crate::engine::{PointIn, PointKernel, PointOut};
-use crate::fields::Field;
+use ondomathx_toolbox::field::Field;
 
 /// `a(p, q) = ∫ (1/ρ) ∇p·∇q`.
 #[derive(Clone, Debug)]
@@ -36,11 +36,11 @@ pub struct AcousticStiffness<R> {
     pub rho: R,
 }
 
-impl<const D: usize, R: Field<D>> PointKernel<D, 1> for AcousticStiffness<R> {
+impl<const D: usize, R: Field<f64>> PointKernel<D, 1> for AcousticStiffness<R> {
     const USES_GRAD: bool = true;
     const USES_XYZ: bool = R::NEEDS_XYZ;
     const USES_LABEL: bool = R::NEEDS_LABEL;
-    const USES_DOF: bool = R::NEEDS_DOF;
+    const USES_DOF: bool = R::NEEDS_INDEX;
     const OUTPUTS_FLUX: bool = true;
 
     #[inline]
@@ -60,11 +60,11 @@ pub struct IsotropicElastic<L, M> {
     pub mu: M,
 }
 
-impl<const D: usize, L: Field<D>, M: Field<D>> PointKernel<D, D> for IsotropicElastic<L, M> {
+impl<const D: usize, L: Field<f64>, M: Field<f64>> PointKernel<D, D> for IsotropicElastic<L, M> {
     const USES_GRAD: bool = true;
     const USES_XYZ: bool = L::NEEDS_XYZ || M::NEEDS_XYZ;
     const USES_LABEL: bool = L::NEEDS_LABEL || M::NEEDS_LABEL;
-    const USES_DOF: bool = L::NEEDS_DOF || M::NEEDS_DOF;
+    const USES_DOF: bool = L::NEEDS_INDEX || M::NEEDS_INDEX;
     const OUTPUTS_FLUX: bool = true;
 
     #[inline]
@@ -106,11 +106,11 @@ pub struct Mass<F> {
     pub coef: F,
 }
 
-impl<const D: usize, const C: usize, F: Field<D>> PointKernel<D, C> for Mass<F> {
+impl<const D: usize, const C: usize, F: Field<f64>> PointKernel<D, C> for Mass<F> {
     const USES_VALUE: bool = true;
     const USES_XYZ: bool = F::NEEDS_XYZ;
     const USES_LABEL: bool = F::NEEDS_LABEL;
-    const USES_DOF: bool = F::NEEDS_DOF;
+    const USES_DOF: bool = F::NEEDS_INDEX;
     const OUTPUTS_SOURCE: bool = true;
 
     #[inline]
@@ -127,11 +127,11 @@ pub struct Divergence<F> {
     pub coef: F,
 }
 
-impl<const D: usize, F: Field<D>> PointKernel<D, D, 1> for Divergence<F> {
+impl<const D: usize, F: Field<f64>> PointKernel<D, D, 1> for Divergence<F> {
     const USES_GRAD: bool = true;
     const USES_XYZ: bool = F::NEEDS_XYZ;
     const USES_LABEL: bool = F::NEEDS_LABEL;
-    const USES_DOF: bool = F::NEEDS_DOF;
+    const USES_DOF: bool = F::NEEDS_INDEX;
     const OUTPUTS_SOURCE: bool = true;
 
     #[inline]
@@ -149,11 +149,11 @@ pub struct DivergenceTranspose<F> {
     pub coef: F,
 }
 
-impl<const D: usize, F: Field<D>> PointKernel<D, 1, D> for DivergenceTranspose<F> {
+impl<const D: usize, F: Field<f64>> PointKernel<D, 1, D> for DivergenceTranspose<F> {
     const USES_VALUE: bool = true;
     const USES_XYZ: bool = F::NEEDS_XYZ;
     const USES_LABEL: bool = F::NEEDS_LABEL;
-    const USES_DOF: bool = F::NEEDS_DOF;
+    const USES_DOF: bool = F::NEEDS_INDEX;
     const OUTPUTS_FLUX: bool = true;
 
     #[inline]

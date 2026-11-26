@@ -1,6 +1,6 @@
 [package]
 name = "ondomathx-sem"
-version = "0.2.0"
+version = "0.3.0"
 description = "Matrix-free spectral elements on quadrangle and hexahedron meshes."
 edition.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ categories = ["mathematics", "science", "simulation"]
 # lobatto: from crates.io (repository Ananke-Inria/Lobatto).
 ondomathx-mesh = { path = "../ondomathx-mesh", version = "0.1.0" }
 # Shared tools (linear algebra, signals) of the workspace.
-ondomathx-toolbox = { path = "../ondomathx-toolbox", version = "0.1.1" }
+ondomathx-toolbox = { path = "../ondomathx-toolbox", version = "0.1.2" }
 lobatto = "0.1.4"
 nalgebra = "0.34"
 rayon = "1"

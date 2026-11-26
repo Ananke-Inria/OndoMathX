@@ -206,6 +206,16 @@ and Q2, supports mixed-dimension meshes.
 - Uniform refinement (2026-07-24): factor n for all cell types, Q2-preserving,
   conforming via the `get_numbering` machinery; extensive coverage + visual
   outputs in `tests/refine.rs`.
+- Repeated tetrahedron refinement made shape-regular (2026-11-26): the odd
+  Freudenthal-Kuhn paths had corners 2 and 3 swapped to get a positive
+  Jacobian, which breaks the Kuhn vertex order the next refinement relies
+  on, so the elements degenerated at each level (worst ‖G‖‖G⁻¹‖ of
+  `Cube.mesh` 5.5 → 9.5 → 17 → 24 → 44). They are now shifted cyclically
+  (`rotate_left(1)`, an odd symmetry of the Kuhn simplex; the only odd
+  reorderings that keep the shapes bounded): the shapes stay in a finite set.
+  Regression test `cube_tet_repeated_refinement_is_shape_regular` (factor 2 ×
+  3 levels, factor 3 × 2 levels). Found by the P2⁺ convergence example of
+  `ondomathx-tetrix`.
 - `Circle` arm map replaced by an O-grid map (2026-07-28): the old
   angle-preserving radial blend `r_new = r + t·(R−r)` had a zero radial
   derivative at the four points where the diagonals meet the circle, so the Q2

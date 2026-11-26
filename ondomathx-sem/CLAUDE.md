@@ -42,6 +42,20 @@ before that date use the old names:
 Rule (TetriX's): `_dg` marks an element-local operation on DG vectors, a
 plain name an assembled one.
 
+Modules since 0.3.0 (2026-11-26, the workspace's common structure):
+`element::{operator, shape, quadrature}` (were `element`, `shape`,
+`quadrature`), `io::{io_vtk, io_vizir}` (were `vtk`, `vizir`), `space`; the
+crate-root re-exports are unchanged.
+
+Fields since 0.3.0 (2026-11-26): the `fields` module is gone; the
+coefficients are `ondomathx_toolbox::field` (`Constant<T>`, `PerLabel<T>`,
+`Function<F>` a closure `Fn(&[f64]) -> T`, `LabelFunction<F>`,
+`PointData<T>`; no `Inverse`: write `Constant(1.0 / kappa)`). Kernels and
+masses take `Field<f64>`; `PointIn` is the field's `Point` (`dof` as its
+index); the flag is `NEEDS_INDEX` (was `NEEDS_DOF`; the kernels' own flag
+stays `USES_DOF`). `PointData::sample(&space, f)` is now
+`PointData(space.sample::<1>(|x| [f(x)]))`.
+
 Output since step 4: `VtkWriter` and `VizirWriter` keep their API and are
 adapters over `ondomathx_toolbox::io_vtk` / `io_vizir`; the VTK title is
 `ondomathx-sem` (was `lobattox`) and values with `|v| < 1e-40` are written as

@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::Mass;
 use ondomathx_sem::{
     Batch, ElementOperator, GeoKind, GeoStorage, Gl, Iso2, Numbering, Quad2, Shape, Space,

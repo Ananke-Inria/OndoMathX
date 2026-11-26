@@ -13,7 +13,7 @@ use std::path::Path;
 
 use ondomathx_toolbox::io_vtk::{Field, VtkGrid};
 
-use crate::shape::Shape;
+use crate::element::shape::Shape;
 use crate::space::Space;
 
 /// A named point field of `components` components, in the space's

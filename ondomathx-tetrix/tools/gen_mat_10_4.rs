@@ -1,12 +1,12 @@
 /// Code generator for `GRADIENT_MAT` used by `gradient_interpolation` and
-/// `transpose_gradient_interpolation` in `finite_element/tet_10_4.rs`.
+/// `transpose_gradient_interpolation` in `element/tet_10_4.rs`.
 ///
 /// Runs with:
-///   cargo run --bin gen_mat_10_4
+///   cargo run --example gen_mat_10_4
 ///
 /// GRADIENT_MAT[k][i] = ∂φ_i/∂x_d(q_j)   where k = j*3+d  (12 rows × 10 cols)
 
-use ondomathx_tetrix::finite_element::{tet_4, tet_10};
+use ondomathx_tetrix::element::{tet_4, tet_10};
 
 const ZERO_THRESHOLD: f64 = 1e-15;
 

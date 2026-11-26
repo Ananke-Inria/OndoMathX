@@ -9,7 +9,7 @@ use ondomathx_mesh::mesh::cube::Cube;
 use ondomathx_mesh::mesh::square::Square;
 use ondomathx_mesh::mesh::Mesh;
 use common::*;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::IsotropicElastic;
 use ondomathx_sem::{GeoKind, GeoStorage, Gl, Gll, Gll3, Iso2, Iso3, Numbering, Quad2, Quad3, Space};
 

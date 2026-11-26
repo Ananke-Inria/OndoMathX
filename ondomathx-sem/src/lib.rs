@@ -1,4 +1,4 @@
-//! # lobattox
+//! # ondomathx-sem
 //!
 //! Matrix-free spectral elements on quadrangle and hexahedron meshes:
 //! Gauss–Lobatto (GLL) Lagrange elements of arbitrary order, operator
@@ -11,24 +11,20 @@
 
 pub mod element;
 pub mod engine;
-pub mod fields;
 pub mod geometry;
+pub mod io;
 pub mod kernels;
 pub mod mixed;
 pub mod operators;
 pub mod ops;
-pub mod quadrature;
-pub mod shape;
 pub mod space;
-pub mod vizir;
-pub mod vtk;
 
-pub use element::{Batch, ElementOperator, PointSet};
+pub use element::operator::{Batch, ElementOperator, PointSet};
 pub use engine::{PointIn, PointKernel, PointOut};
 pub use geometry::{cofactor, det, GeoStorage};
 pub use mixed::Pointwise;
-pub use quadrature::{Gl, Gll, Quad2, Quad3, Quadrature, Rule, Sweep};
-pub use shape::{Gll2, Gll3, Iso2, Iso3, Shape};
+pub use element::quadrature::{Gl, Gll, Quad2, Quad3, Quadrature, Rule, Sweep};
+pub use element::shape::{Gll2, Gll3, Iso2, Iso3, Shape};
 pub use space::{GeoKind, InverseMass, Numbering, Space, SpaceBuilder};
-pub use vizir::VizirWriter;
-pub use vtk::{VtkField, VtkWriter};
+pub use io::io_vizir::VizirWriter;
+pub use io::io_vtk::{VtkField, VtkWriter};

@@ -24,11 +24,11 @@
 
 use nalgebra::SMatrix;
 
-use crate::element::{mlt_add_element_batched, Batch, ElementOperator, PointSet};
+use crate::element::operator::{mlt_add_element_batched, Batch, ElementOperator, PointSet};
 use crate::engine::{PointIn, PointKernel, PointOut};
 use crate::geometry::PointGeo;
-use crate::quadrature::{Quadrature, Sweep};
-use crate::shape::Shape;
+use crate::element::quadrature::{Quadrature, Sweep};
+use crate::element::shape::Shape;
 use crate::space::{GeoKind, Space};
 
 /// The generic element operator of [`Space::mlt_mixed_dg`]: the pointwise `kernel`

@@ -9,7 +9,7 @@ use common::*;
 use lobatto::collocation::Gauss;
 use lobatto::tables::{derivative_matrix_dyn, interpolation_row, points_weights_dyn};
 use lobatto::utilities::barycentric_weights;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::{
     AcousticStiffness, Divergence, DivergenceTranspose, IsotropicElastic, Mass,
 };

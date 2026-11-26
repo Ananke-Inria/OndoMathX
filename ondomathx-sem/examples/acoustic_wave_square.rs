@@ -21,10 +21,11 @@ use std::time::Instant;
 
 use ondomathx_mesh::mesh::square::Square;
 use ondomathx_mesh::mesh::Mesh;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::AnisotropicAcoustic;
 use ondomathx_sem::{Iso2, Numbering, Space, VizirWriter, VtkField, VtkWriter};
 
+use ondomathx_toolbox::io_vizir::write_sols;
 use ondomathx_toolbox::signals::{gaussian};
 
 fn main() {
@@ -128,4 +129,9 @@ fn main() {
         1e3 * elapsed / steps as f64,
         dir.display()
     );
+
+    // 9. Vizir: the time series (`.sols`) and the command that opens it.
+    let sols: Vec<String> = (0..n_out).map(|k| format!("acoustic_wave_square.{k:05}.sol")).collect();
+    write_sols(dir.join("acoustic_wave_square.sols"), &sols).unwrap();
+    println!("cd {} && vizir4 -in acoustic_wave_square.mesh -sol acoustic_wave_square.00000.sol -sols acoustic_wave_square.sols", dir.display());
 }

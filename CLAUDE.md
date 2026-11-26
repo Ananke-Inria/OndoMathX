@@ -154,6 +154,80 @@ together. Publish order: toolbox → sem → tetrix.
    113k in `acoustic_wave_cube`), TetriX's in the version and title lines
    and the points' exact digits (≤ 3.8e-14 relative). 397 workspace tests.
 
+Fields (decided 2026-11-26, after the C++ `Sources/Field` of
+`~/Documents/OndoMathX_gitlab/core`): `ondomathx_toolbox::field`, **values
+only** (no operator `Eval`/`AdjointEval` layer; the algebra stays in the
+kernels). `Field<T>` with `NEEDS_XYZ`, `NEEDS_LABEL`, `NEEDS_INDEX` and
+`eval(&impl Point) -> T`; the point through the trait `Point` (`xyz`,
+`label`, `index`; `At` a plain one). One type per C++ regularity, generic
+over the value: `Constant<T>`, `PerLabel<T>` (a missing label panics),
+`Function<F>` (`Fn(&[f64]) -> T`), `LabelFunction<F>` (`Fn(&[f64], usize) ->
+T`, the C++ `PiecewiseC0`), `PointData<T>` (no `Inverse`: removed at the user's request, 1/κ is written with the other types; a general `Map(field, g)` if a need appears).
+Values now: `f64`, `[f64; N]`, `[[f64; J]; I]` (row `i`). The C++
+isotropic, 4th/3rd-order and Neo-Hookean tensors are not ported.
+**Adopted 2026-11-26**: sem's `fields.rs` removed, its kernels and masses take
+`Field<f64>` (`PointIn` implements `Point`, `dof` as the index; `Function`
+is a closure, a missing `PerLabel` label panics instead of giving NaN; the
+eight examples bit-identical). TetriX: `assemble_stiffness`, `assemble_mass`
+(density), `mlt_stiffness`, `mlt_stiffness_dg_seq`, `mlt_stiffness_dg`,
+`mlt_add_stiffness_dg` take a coefficient field first, **constant only** (a
+field needing xyz, label or index is refused at compile time); it multiplies
+α (its driver's 60 output files bit-identical). Versions for the next
+publication: toolbox 0.1.2, sem 0.3.0, tetrix 0.3.0 (both require toolbox
+0.1.2).
+
+TetriX layout (2026-11-26): `src/`, `benches/`, `tests/`, `examples/`,
+`tools/` side by side. The former `TetriX` binary (`src/main.rs`) is
+`examples/acoustic_wave_heart.rs` (output in `out/acoustic_wave_heart/`,
+git-ignored, as sem's examples; its 60 output files bit-identical); the
+`gen_mat_*` code generators of the `finite_element/` tables are in `tools/`,
+declared `[[example]]` (`cargo run --example gen_mat_10_4`), so no binary is
+installed with the crate.
+
+Vizir output fixed (2026-11-26): the `.sol` field-type line was the component
+count (`1 3` for a 3D displacement), which libMeshb reads as a symmetric
+matrix (types: 1 scalar, 2 vector, 3 symmetric matrix, 4 matrix), so Vizir
+read 6 values per node and the data were misaligned (`elastic_wave_cube`;
+the 2D displacements were wrong too). `io_vizir` now writes `1 1` for one
+component, `1 2` for 2 or 3 (2D vectors padded with `z = 0`: the files are in
+dimension 3), `C 1 … 1` otherwise; checked with `vizir4 -checksurf` (the
+reconstructed `.solb` sizes match 1 and 3 values per node). New
+`io_vizir::write_sols(path, files)`: every example writes `<name>.sols` (its
+snapshots, **absolute paths**; the nearly incompressible ones also
+`<name>_pressure.sols`), TetriX's example also `heart.mesh`, and the run ends
+with `vizir4 -in <absolute mesh> -sols <absolute .sols> -checksurf` (Vizir adds
+the solutions on the boundary faces; after the C++
+convention, `Scripts/ViZiR_README.md`). No `default.vizir` (removed at the
+user's request; `Checksurf 1` in it would make Vizir add the solutions on
+the boundary faces, which the `.sol` files do not hold). Not checked on
+screen (no screen access from the session; `vizir4 -movie` without a saved
+`vizir.state` shows only the mesh).
+**Corrected the same day** (against the ViZiR 4 user guide and the installed
+`vizir4`, Oct 2026 build): `-checksurf` after `-in … -sols …` is ignored
+("the surface reconstruction is not active"; it is a mode of its own, guide
+11.3, or the `Checksurf` keyword of `default.vizir`, 7.10), so the surfaces
+showed no solution. `-sols` does not open the first file (it tries
+`<mesh>.sol`), and a relative path in a `.sols` is resolved against the
+working directory (tested: bare names fail from the parent directory, load
+from the files' one). Now (user's choice): `.sols` files list **bare file
+names**, the 3D examples (heart, the three cubes) write `default.vizir` with
+`Checksurf 1` next to their output, and the runs end with `cd <dir> && vizir4
+-in <mesh> -sol <first>.00000.sol -sols <name>.sols`. Heart mesh: 1788 of its
+boundary faces are missing from its `Triangles`; Vizir adds them.
+
+Common module structure (2026-11-26; the rest of each crate to be sorted
+later): `io` (`io::io_vtk`, `io::io_vizir`), `element` (the reference element
+and what acts on one element), `space` (finite-element spaces).
+- sem: `element::{operator, shape, quadrature}` (were `element.rs`,
+  `shape.rs`, `quadrature.rs`), `io::{io_vtk, io_vizir}` (were `vtk.rs`,
+  `vizir.rs`), `space` unchanged; the crate-root re-exports (`Space`,
+  `ElementOperator`, `Sweep`, `Iso2`, `VtkWriter`, …) keep their paths. Still
+  at the root: `engine`, `mixed`, `kernels`, `operators`, `geometry`, `ops`.
+- TetriX: `element` (was `finite_element`, every `tet_*` module),
+  `io::{io_vtk, io_vizir}`, `space::p2_plus` (the type `P2PlusSpace`, was
+  `tetrix_p2_space::TetriXP2Space`); no root re-exports, so
+  its paths changed (`ondomathx_tetrix::space::p2_plus::P2PlusSpace`).
+
 The convergence plan (D1–D11) is complete. Not decided: `Field` coefficients for TetriX; the names of the mass
 builders (TetriX `assemble_mass(&mut mass, α)` global-size, sem
 `local_mass(coef)` per copy, `inverse_mass(coef)`); test meshes in the

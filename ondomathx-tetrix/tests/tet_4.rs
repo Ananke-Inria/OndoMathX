@@ -1,4 +1,4 @@
-use ondomathx_tetrix::finite_element::tet_4::{POINTS, WEIGHTS};
+use ondomathx_tetrix::element::tet_4::{POINTS, WEIGHTS};
 
 const TOL: f64 = 1e-14;
 

@@ -1,5 +1,5 @@
 use nalgebra::Matrix3;
-use ondomathx_tetrix::finite_element::tet_10::{build_local_stiffness, mlt_stiffness};
+use ondomathx_tetrix::element::tet_10::{build_local_stiffness, mlt_stiffness};
 
 const TOL_K: f64 = 1e-14;
 

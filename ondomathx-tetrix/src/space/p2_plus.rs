@@ -1,17 +1,24 @@
+//! The P2⁺ space: isoparametric P2 elements on tetrahedra enriched with 4
+//! face bubbles and 1 interior bubble (15 nodes, `element::tet_15`), the
+//! mass-lumped element of Cohen–Joly–Tordjman and Mulder, with DG storage.
+
 use ondomathx_mesh::mesh::{DoFSet, Mesh, UnstructuredMesh, TETRAHEDRON};
+use ondomathx_toolbox::field::{At, Field};
 use ondomathx_toolbox::numbering::DgMap;
 use nalgebra::{Matrix3, Vector3};
 use rayon::prelude::*;
 use sprs::{CsMat, TriMat};
 
-use crate::finite_element::{tet_14, tet_15, tet_15_14};
+use crate::element::{tet_14, tet_15, tet_15_14};
 
 pub const DIM: usize = 3;
 pub const ORDER: usize = 2;
 const N_LOC_DOF: usize = 15;
 const P2_N_LOC_DOF: usize = 10;
 
-pub struct TetriXP2Space<'a> {
+/// The P2⁺ space on a tetrahedral mesh: DG storage (15 copies per
+/// element), the DG ↔ global map, the P2 sub-numbering for output.
+pub struct P2PlusSpace<'a> {
     mesh: &'a UnstructuredMesh,
     elements: Vec<usize>,
     n_color: usize,
@@ -74,16 +81,29 @@ fn jacobian_matrix(mesh: &UnstructuredMesh, elem: usize, uvw: &[f64; 3]) -> Matr
     Matrix3::from_row_slice(&flat)
 }
 
+/// The value of a constant coefficient field. Only constant coefficients
+/// are supported for now: a field that needs the coordinates, the label or
+/// the index of a point is refused at compile time.
+fn constant_coefficient<F: Field<f64>>(coef: &F) -> f64 {
+    const {
+        assert!(
+            !F::NEEDS_XYZ && !F::NEEDS_LABEL && !F::NEEDS_INDEX,
+            "P2PlusSpace supports only constant coefficient fields (Constant<f64>)"
+        )
+    };
+    coef.eval(&At { xyz: &[], label: 0, index: 0 })
+}
+
 // ---------------------------------------------------------------------------
 // Constructor
 // ---------------------------------------------------------------------------
 
-impl<'a> TetriXP2Space<'a> {
+impl<'a> P2PlusSpace<'a> {
     pub fn new(mesh: &'a UnstructuredMesh) -> Self {
         assert_eq!(
             mesh.get_topologic_dimension(),
             3,
-            "TetriXP2Space requires a 3-D mesh"
+            "P2PlusSpace requires a 3-D mesh"
         );
 
         // 3-D element list (local index el → global element index elem)
@@ -119,7 +139,7 @@ impl<'a> TetriXP2Space<'a> {
             grad_def_origin.push(g);
             jacobian_origin.push(j);
             // sym_grad = J * G^{-T} * G^{-1}
-            sym_grad_def_origin.push(j * g_inv.transpose() * g_inv);
+            sym_grad_def_origin.push(j  * g_inv * g_inv.transpose());
 
             // P2 sub-numbering (first P2_N_LOC_DOF local DoFs)
             for i in 0..P2_N_LOC_DOF {
@@ -168,7 +188,7 @@ impl<'a> TetriXP2Space<'a> {
             elem_by_color[color].push(el);
         }
 
-        TetriXP2Space {
+        P2PlusSpace {
             mesh,
             elements,
             n_color,
@@ -283,13 +303,15 @@ impl<'a> TetriXP2Space<'a> {
 
     /// Assembles the global stiffness matrix as a sparse CSR matrix.
     ///
-    /// K[I, J] = Σ_{el} Σ_{i,j} α · |J_el| · k_loc[i,j]
+    /// K[I, J] = Σ_{el} Σ_{i,j} α · c · |J_el| · k_loc[i,j], `c` the constant
+    /// coefficient field `coef` (∫ c ∇u·∇v)
     ///
     /// where the sum over (i,j) runs over local DoF pairs with loc2glob(el,i)=I
     /// and loc2glob(el,j)=J, and k_loc is the local stiffness matrix on the
     /// reference element scaled by `sym_grad_def_origin` (which already absorbs
     /// the Jacobian factor).
-    pub fn assemble_stiffness(&self, alpha: f64) -> CsMat<f64> {
+    pub fn assemble_stiffness(&self, coef: &impl Field<f64>, alpha: f64) -> CsMat<f64> {
+        let alpha = alpha * constant_coefficient(coef);
         let mut triplets: TriMat<f64> = TriMat::new((self.n_dof, self.n_dof));
 
         for el in 0..self.n_elem {
@@ -305,7 +327,8 @@ impl<'a> TetriXP2Space<'a> {
         triplets.to_csr()
     }
 
-    pub fn assemble_mass(&self, mass: &mut [f64], alpha: f64) {
+    pub fn assemble_mass(&self, density: &impl Field<f64>, mass: &mut [f64], alpha: f64) {
+        let alpha = alpha * constant_coefficient(density);
         for i_elt in 0..self.n_elem {
             let j = self.jacobian_origin[i_elt];
             for i_loc in 0..N_LOC_DOF {
@@ -316,7 +339,8 @@ impl<'a> TetriXP2Space<'a> {
         }
     }
 
-    pub fn mlt_stiffness(&self, u: &[f64], v: &mut [f64], alpha: f64) {
+    pub fn mlt_stiffness(&self, coef: &impl Field<f64>, u: &[f64], v: &mut [f64], alpha: f64) {
+        let alpha = alpha * constant_coefficient(coef);
         for x in v.iter_mut() {
             *x = 0.0;
         }
@@ -364,7 +388,8 @@ impl<'a> TetriXP2Space<'a> {
 
     /// Sequential version of `mlt_stiffness_dg` (no Rayon), useful for
     /// profiling or single-threaded benchmarking.
-    pub fn mlt_stiffness_dg_seq(&self, u: &[f64], v: &mut [f64], alpha: f64) {
+    pub fn mlt_stiffness_dg_seq(&self, coef: &impl Field<f64>, u: &[f64], v: &mut [f64], alpha: f64) {
+        let alpha = alpha * constant_coefficient(coef);
         for el in 0..self.n_elem {
             let offset = el * N_LOC_DOF;
             let buf_u: &[f64; N_LOC_DOF] = u[offset..offset + N_LOC_DOF].try_into().unwrap();
@@ -382,7 +407,8 @@ impl<'a> TetriXP2Space<'a> {
     /// element-by-element: DoF `i_loc` of element `el` lives at index
     /// `el * N_LOC_DOF + i_loc`.  Because every element owns its own slice of
     /// DoFs there is no global assembly and no coloring is required.
-    pub fn mlt_stiffness_dg(&self, u: &[f64], v: &mut [f64], alpha: f64) {
+    pub fn mlt_stiffness_dg(&self, coef: &impl Field<f64>, u: &[f64], v: &mut [f64], alpha: f64) {
+        let alpha = alpha * constant_coefficient(coef);
         v.par_chunks_mut(N_LOC_DOF)
             .zip(u.par_chunks(N_LOC_DOF))
             .zip(self.sym_grad_def_origin.par_iter())
@@ -400,7 +426,8 @@ impl<'a> TetriXP2Space<'a> {
 
     /// Like `mlt_stiffness_dg`, but accumulating: `v ← v + α K u` on DG
     /// vectors (element-local, no coloring).
-    pub fn mlt_add_stiffness_dg(&self, u: &[f64], v: &mut [f64], alpha: f64) {
+    pub fn mlt_add_stiffness_dg(&self, coef: &impl Field<f64>, u: &[f64], v: &mut [f64], alpha: f64) {
+        let alpha = alpha * constant_coefficient(coef);
         v.par_chunks_mut(N_LOC_DOF)
             .zip(u.par_chunks(N_LOC_DOF))
             .zip(self.sym_grad_def_origin.par_iter())

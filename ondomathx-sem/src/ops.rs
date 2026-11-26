@@ -19,8 +19,8 @@ use ondomathx_toolbox::lal::{self, EigenEstimate};
 use rayon::prelude::*;
 
 use crate::engine::PointKernel;
-use crate::fields::Field;
-use crate::shape::Shape;
+use ondomathx_toolbox::field::Field;
+use crate::element::shape::Shape;
 use crate::space::Space;
 
 impl<const D: usize, S: Shape<D>> Space<D, S> {
@@ -135,7 +135,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     pub fn max_eigenvalue<const C: usize>(
         &self,
         kernel: &impl PointKernel<D, C>,
-        mass: &impl Field<D>,
+        mass: &impl Field<f64>,
         max_iter: usize,
         rtol: f64,
     ) -> EigenEstimate {

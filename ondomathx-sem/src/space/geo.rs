@@ -4,7 +4,7 @@
 use nalgebra::{SMatrix, SVector};
 
 use crate::geometry::{cofactor, det, jacobian_from_cofactor, GroupGeo, PointGeo};
-use crate::shape::Shape;
+use crate::element::shape::Shape;
 
 use super::{GeoKind, Space};
 

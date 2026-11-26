@@ -28,7 +28,7 @@ fn mid(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
 //triangulation of the integer grid. The Kuhn subdivision restricted to a
 //boundary face is the principal triangulation of that face, so volume and
 //boundary children stay conforming; every child has a positive Jacobian
-//(odd permutation paths are reordered).
+//(the corners of odd permutation paths are shifted cyclically, see below).
 fn get_children_corners(reference_element: &ReferenceElement, n: usize) -> Vec<Vec<[f64; 3]>> {
     let v = reference_element.vertexes;
     let nv = reference_element.get_nvertexes();
@@ -112,8 +112,17 @@ fn get_children_corners(reference_element: &ReferenceElement, n: usize) -> Vec<V
                                     })
                                     .collect();
 
+                                //An odd path has a negative Jacobian. The
+                                //cyclic shift of its corners (an odd
+                                //permutation) flips it and is a symmetry of
+                                //the Kuhn simplex, so the next refinement
+                                //still maps the child onto the Kuhn simplex
+                                //and the shapes stay in a finite set. A
+                                //transposition (e.g. swapping corners 2 and
+                                //3) is not: the elements degenerate a little
+                                //more at each refinement.
                                 if *odd {
-                                    corners.swap(2, 3);
+                                    corners.rotate_left(1);
                                 }
 
                                 children.push(corners);

@@ -9,7 +9,7 @@ use ondomathx_mesh::mesh::circle::Circle;
 use ondomathx_mesh::mesh::cube::Cube;
 use ondomathx_mesh::mesh::square::Square;
 use common::*;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::{AcousticStiffness, H1Error, L2Error};
 use ondomathx_sem::{GeoStorage, Gl, Iso2, Iso3, Numbering, Quad2, Shape, Space};
 

@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 
 use nalgebra::SMatrix;
 
-use crate::element::{Batch, ElementOperator, PointSet};
-use crate::quadrature::{Quadrature, Sweep};
-use crate::shape::Shape;
+use crate::element::operator::{Batch, ElementOperator, PointSet};
+use crate::element::quadrature::{Quadrature, Sweep};
+use crate::element::shape::Shape;
 use crate::space::Space;
 
 /// The pressure stiffness `K^P = Bᵀ (M^P)⁻¹ B` of the displacement–pressure

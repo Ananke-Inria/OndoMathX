@@ -14,8 +14,8 @@ fn temp(name: &str) -> std::path::PathBuf {
     dir.join(name)
 }
 
-/// A parsed `.sol`: (tag, positions, n_elem, components, degree, rows).
-type Sol = (String, Vec<Vec<f64>>, usize, usize, usize, Vec<Vec<f64>>);
+/// A parsed `.sol`: (tag, positions, n_elem, field-type line, degree, rows).
+type Sol = (String, Vec<Vec<f64>>, usize, String, usize, Vec<Vec<f64>>);
 
 /// Parses a `.sol`.
 fn parse(path: &std::path::Path) -> Sol {
@@ -36,12 +36,7 @@ fn parse(path: &std::path::Path) -> Sol {
     let mut i = 5 + nloc;
     assert_eq!(lines[i], format!("HOSolAt{tag}"));
     let n_elem: usize = lines[i + 1].parse().unwrap();
-    let c: usize = lines[i + 2]
-        .split_whitespace()
-        .nth(1)
-        .unwrap()
-        .parse()
-        .unwrap();
+    let types = lines[i + 2].to_string();
     let dl: Vec<usize> = lines[i + 3]
         .split_whitespace()
         .map(|v| v.parse().unwrap())
@@ -53,7 +48,7 @@ fn parse(path: &std::path::Path) -> Sol {
         .map(|l| l.split_whitespace().map(|v| v.parse().unwrap()).collect())
         .collect();
     assert_eq!(lines[i + n_elem], "End");
-    (tag, pos, n_elem, c, dl[0], rows)
+    (tag, pos, n_elem, types, dl[0], rows)
 }
 
 /// Number of entries of a section of a Medit `.mesh` written by `ondomathx-mesh`.
@@ -76,10 +71,11 @@ fn check<const D: usize, S: ondomathx_sem::Shape<D>>(
     assert_eq!(w.tag(), tag);
     let sol = temp(&format!("{name}.sol"));
     w.write(&sol, &data, c).unwrap();
-    let (t, pos, n_elem, cc, degree, rows) = parse(&sol);
+    let (t, pos, n_elem, types, degree, rows) = parse(&sol);
+    // One libMeshb vector field (type 2): 3 values per node, padded in 2D.
     assert_eq!(
-        (t.as_str(), n_elem, cc, degree),
-        (tag, space.num_elements(), c, S::N[0] - 1)
+        (t.as_str(), n_elem, types.as_str(), degree),
+        (tag, space.num_elements(), "1 2", S::N[0] - 1)
     );
     for (node, p) in pos.iter().enumerate() {
         assert_eq!(p.as_slice(), space.loc_dof_coordinates(node).as_slice());
@@ -89,10 +85,11 @@ fn check<const D: usize, S: ondomathx_sem::Shape<D>>(
     by_mesh.sort_by_key(|&e| space.mesh_element(e));
     let nloc = S::NLOC;
     for (row, &e) in rows.iter().zip(&by_mesh) {
-        assert_eq!(row.len(), nloc * c);
+        assert_eq!(row.len(), nloc * 3);
         for node in 0..nloc {
-            for k in 0..c {
-                assert_eq!(row[node * c + k], data[(e * c + k) * nloc + node]);
+            for k in 0..3 {
+                let expected = if k < c { data[(e * c + k) * nloc + node] } else { 0.0 };
+                assert_eq!(row[node * 3 + k], expected);
             }
         }
     }

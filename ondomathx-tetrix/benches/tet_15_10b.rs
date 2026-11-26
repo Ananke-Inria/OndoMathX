@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use nalgebra::{DMatrix, DVector, Matrix3, SVector};
-use ondomathx_tetrix::finite_element::{tet_10b, tet_15, tet_15_10b};
+use ondomathx_tetrix::element::{tet_10b, tet_15, tet_15_10b};
 
 /// Build the 15×15 change-of-basis matrix M where M[i][j] = φ_j^{10b}(POINTS_15[i]).
 ///

@@ -28,7 +28,7 @@ use std::time::Instant;
 
 use ondomathx_mesh::mesh::cube::Cube;
 use ondomathx_mesh::mesh::Mesh;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::{Divergence, IsotropicElastic};
 use ondomathx_sem::operators::{FusedKpQ4Q2, PressureMass3};
 use ondomathx_sem::{
@@ -38,6 +38,7 @@ use ondomathx_sem::{
 use rayon::prelude::*;
 
 use ondomathx_toolbox::lal::power_iteration;
+use ondomathx_toolbox::io_vizir::write_sols;
 use ondomathx_toolbox::signals::{bump, ricker};
 
 /// The Gauss–Lobatto rule at the displacement nodes, used for `b(u, q)` when
@@ -194,4 +195,15 @@ fn main() {
         1e3 * elapsed / steps as f64,
         dir.display()
     );
+
+    // 9. Vizir: the time series (`.sols`) and the command that opens it.
+    let sols: Vec<String> = (0..n_out).map(|k| format!("{name}.{k:05}.sol")).collect();
+    write_sols(dir.join(format!("{name}.sols")), &sols).unwrap();
+    let sols_pressure: Vec<String> = (0..n_out).map(|k| format!("{name}_pressure.{k:05}.sol")).collect();
+    write_sols(dir.join(format!("{name}_pressure.sols")), &sols_pressure).unwrap();
+    // Vizir adds the solution on the boundary faces (the .sol files hold the
+    // volume elements only; `Checksurf`, user guide 7.10).
+    std::fs::write(dir.join("default.vizir"), "Checksurf\n1\n").unwrap();
+    println!("cd {} && vizir4 -in {name}.mesh -sol {name}.00000.sol -sols {name}.sols", dir.display());
+    println!("cd {} && vizir4 -in {name}.mesh -sol {name}_pressure.00000.sol -sols {name}_pressure.sols", dir.display());
 }

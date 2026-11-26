@@ -1,9 +1,10 @@
+use ondomathx_toolbox::field::Constant;
 use ondomathx_mesh::mesh::UnstructuredMesh;
 use criterion::{criterion_group, criterion_main, Criterion};
 use nalgebra::DVector;
 use nalgebra_sparse::CsrMatrix;
 use sprs::prod::mul_acc_mat_vec_csr;
-use ondomathx_tetrix::tetrix_p2_space::TetriXP2Space;
+use ondomathx_tetrix::space::p2_plus::P2PlusSpace;
 
 fn setup() -> (UnstructuredMesh,) {
     let mesh = UnstructuredMesh::new_from_mesh(concat!(env!("CARGO_MANIFEST_DIR"), "/../ondomathx-mesh/assets/Heart.mesh"))
@@ -13,7 +14,7 @@ fn setup() -> (UnstructuredMesh,) {
 
 fn bench_mlt_stiffness(c: &mut Criterion) {
     let (mesh,) = setup();
-    let fe_space = TetriXP2Space::new(&mesh);
+    let fe_space = P2PlusSpace::new(&mesh);
     let n_dof = fe_space.num_dofs();
 
     let u: Vec<f64> = (0..n_dof).map(|i| (i as f64).sin()).collect();
@@ -21,14 +22,14 @@ fn bench_mlt_stiffness(c: &mut Criterion) {
 
     c.bench_function("mlt_stiffness", |b| {
         b.iter(|| {
-            fe_space.mlt_stiffness(std::hint::black_box(&u), std::hint::black_box(&mut v), 1.0)
+            fe_space.mlt_stiffness(&Constant(1.0), std::hint::black_box(&u), std::hint::black_box(&mut v), 1.0)
         })
     });
 }
 
 fn bench_mlt_stiffness_dg(c: &mut Criterion) {
     let (mesh,) = setup();
-    let fe_space = TetriXP2Space::new(&mesh);
+    let fe_space = P2PlusSpace::new(&mesh);
     let n_elem = fe_space.num_elements();
     let n_loc = fe_space.num_loc_dofs();
     let n_dg = n_elem * n_loc;
@@ -38,14 +39,14 @@ fn bench_mlt_stiffness_dg(c: &mut Criterion) {
 
     c.bench_function("mlt_stiffness_dg", |b| {
         b.iter(|| {
-            fe_space.mlt_stiffness_dg(std::hint::black_box(&u), std::hint::black_box(&mut v), 1.0)
+            fe_space.mlt_stiffness_dg(&Constant(1.0), std::hint::black_box(&u), std::hint::black_box(&mut v), 1.0)
         })
     });
 }
 
 fn bench_mlt_stiffness_dg_seq(c: &mut Criterion) {
     let (mesh,) = setup();
-    let fe_space = TetriXP2Space::new(&mesh);
+    let fe_space = P2PlusSpace::new(&mesh);
     let n_elem = fe_space.num_elements();
     let n_loc = fe_space.num_loc_dofs();
     let n_dg = n_elem * n_loc;
@@ -55,7 +56,7 @@ fn bench_mlt_stiffness_dg_seq(c: &mut Criterion) {
 
     c.bench_function("mlt_stiffness_dg_seq", |b| {
         b.iter(|| {
-            fe_space.mlt_stiffness_dg_seq(
+            fe_space.mlt_stiffness_dg_seq(&Constant(1.0), 
                 std::hint::black_box(&u),
                 std::hint::black_box(&mut v),
                 1.0,
@@ -66,14 +67,14 @@ fn bench_mlt_stiffness_dg_seq(c: &mut Criterion) {
 
 fn bench_mlt_inverse_mass(c: &mut Criterion) {
     let (mesh,) = setup();
-    let fe_space = TetriXP2Space::new(&mesh);
+    let fe_space = P2PlusSpace::new(&mesh);
     let n_dof = fe_space.num_dofs();
     let n_elem = fe_space.num_elements();
     let n_loc = fe_space.num_loc_dofs();
     let n_dg = n_elem * n_loc;
 
     let mut mass = vec![0.0_f64; n_dof];
-    fe_space.assemble_mass(&mut mass, 1.0);
+    fe_space.assemble_mass(&Constant(1.0), &mut mass, 1.0);
 
     let mut dg: Vec<f64> = (0..n_dg).map(|i| (i as f64).sin()).collect();
 
@@ -91,14 +92,14 @@ fn bench_mlt_inverse_mass(c: &mut Criterion) {
 ///   - matfree DG:  mlt_stiffness_dg(u_dg, v_dg)  →  mlt_inverse_mass(v_dg, mass)
 fn bench_stiffness_inverse_mass(c: &mut Criterion) {
     let (mesh,) = setup();
-    let fe_space = TetriXP2Space::new(&mesh);
+    let fe_space = P2PlusSpace::new(&mesh);
     let n_dof = fe_space.num_dofs();
     let n_dg = fe_space.num_elements() * fe_space.num_loc_dofs();
 
     // --- shared setup ---
-    let k_csr = fe_space.assemble_stiffness(1.0);
+    let k_csr = fe_space.assemble_stiffness(&Constant(1.0), 1.0);
     let mut mass = vec![0.0_f64; n_dof];
-    fe_space.assemble_mass(&mut mass, 1.0);
+    fe_space.assemble_mass(&Constant(1.0), &mut mass, 1.0);
 
     let u_cg: Vec<f64> = (0..n_dof).map(|i| (i as f64).sin()).collect();
     let mut v_cg = vec![0.0_f64; n_dof];
@@ -145,7 +146,7 @@ fn bench_stiffness_inverse_mass(c: &mut Criterion) {
 
     group.bench_function("matfree DG + mlt_inverse_mass", |b| {
         b.iter(|| {
-            fe_space.mlt_stiffness_dg(
+            fe_space.mlt_stiffness_dg(&Constant(1.0), 
                 std::hint::black_box(&u_dg),
                 std::hint::black_box(&mut v_dg),
                 1.0,

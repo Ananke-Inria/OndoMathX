@@ -1,7 +1,7 @@
 mod common;
 
 use common::*;
-use ondomathx_sem::fields::{Constant, PerLabel};
+use ondomathx_toolbox::field::{Constant, PerLabel};
 use ondomathx_sem::kernels::{AcousticStiffness, IsotropicElastic};
 use ondomathx_sem::{
     Iso2, Iso3, Numbering, PointKernel, Shape, Space, VtkField, VtkWriter,

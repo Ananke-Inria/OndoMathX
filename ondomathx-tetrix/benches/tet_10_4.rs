@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use nalgebra::{DMatrix, DVector};
-use ondomathx_tetrix::finite_element::{tet_4, tet_10, tet_10_4};
+use ondomathx_tetrix::element::{tet_4, tet_10, tet_10_4};
 
 fn build_matrix() -> DMatrix<f64> {
     DMatrix::from_fn(12, 10, |row, col| {

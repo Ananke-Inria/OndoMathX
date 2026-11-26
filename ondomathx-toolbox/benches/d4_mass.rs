@@ -13,14 +13,14 @@
 //! ```text
 //! RAYON_NUM_THREADS=10 cargo bench -p ondomathx-toolbox --bench d4_mass
 //! ```
+use ondomathx_toolbox::field::Constant;
 use std::time::Instant;
 
 use ondomathx_mesh::mesh::cube::Cube;
 use ondomathx_mesh::mesh::{Mesh, UnstructuredMesh};
-use ondomathx_sem::fields::Constant;
 use ondomathx_sem::kernels::{AnisotropicAcoustic, IsotropicElastic};
 use ondomathx_sem::{Iso3, Numbering, PointKernel, Space};
-use ondomathx_tetrix::tetrix_p2_space::TetriXP2Space;
+use ondomathx_tetrix::space::p2_plus::P2PlusSpace;
 use ondomathx_toolbox::lal;
 use ondomathx_toolbox::numbering::DgMap;
 use rayon::prelude::*;
@@ -161,19 +161,19 @@ fn sem_case<const C: usize>(name: &str, n_el: usize, kernel: &impl PointKernel<3
 fn tetrix_case() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../ondomathx-mesh/assets/Heart.mesh");
     let mesh = UnstructuredMesh::new_from_mesh(path).expect("Heart.mesh");
-    let space = TetriXP2Space::new(&mesh);
+    let space = P2PlusSpace::new(&mesh);
     let (n_elem, nloc, n_dof) = (space.num_elements(), space.num_loc_dofs(), space.num_dofs());
     let flat: Vec<usize> = (0..n_elem).flat_map(|e| (0..nloc).map(move |i| (e, i))).map(|(e, i)| space.loc2glob(e, i)).collect();
     let map = DgMap::new(&flat, nloc, n_dof);
     let n = n_elem * nloc;
     let mut mass = vec![0.0; n_dof];
-    space.assemble_mass(&mut mass, 1.0);
+    space.assemble_mass(&Constant(1.0), &mut mass, 1.0);
     let inv_diag: Vec<f64> = (0..n).map(|k| 1.0 / mass[map.dg2glob(k)]).collect();
     let u_cg: Vec<f64> = (0..n_dof).map(|g| ((g as f64) * 1e-3).sin()).collect();
     let mut u = vec![0.0; n];
     space.scatter_cg(&u_cg, &mut u);
     let mut ku0 = vec![0.0; n];
-    let k_ms = best(|| space.mlt_stiffness_dg(&u, &mut ku0, 1.0));
+    let k_ms = best(|| space.mlt_stiffness_dg(&Constant(1.0), &u, &mut ku0, 1.0));
     let src: Vec<f64> = (0..n).map(|i| ((i as f64) * 7e-4).cos()).collect();
     let prev0: Vec<f64> = (0..n).map(|i| ((i as f64) * 3e-4).sin()).collect();
     let (mut ku, mut prev) = (ku0.clone(), prev0.clone());

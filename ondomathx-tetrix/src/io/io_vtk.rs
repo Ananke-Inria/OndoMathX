@@ -9,7 +9,7 @@ use std::path::Path;
 
 use ondomathx_toolbox::io_vtk::{Field, VtkGrid};
 
-use crate::tetrix_p2_space::TetriXP2Space;
+use crate::space::p2_plus::P2PlusSpace;
 
 /// A named field of `components` components, a global (CG) vector in the
 /// layout `[dof][comp]` (`num_dofs · components` entries).
@@ -20,7 +20,7 @@ pub struct VtkField<'a> {
     pub data: &'a [f64],
 }
 
-/// Writes snapshots of fields defined on one [`TetriXP2Space`].
+/// Writes snapshots of fields defined on one [`P2PlusSpace`].
 pub struct VtkWriter {
     grid: VtkGrid,
     /// Global DoF of each P2 point.
@@ -30,7 +30,7 @@ pub struct VtkWriter {
 
 impl VtkWriter {
     /// Formats the P2 points and the quadratic tetrahedra of `fe_space`.
-    pub fn new(fe_space: &TetriXP2Space) -> Self {
+    pub fn new(fe_space: &P2PlusSpace) -> Self {
         let n_p2 = fe_space.p2_num_dofs();
         let grid = VtkGrid::new(
             "ondomathx-tetrix",
@@ -88,12 +88,12 @@ impl VtkWriter {
 
 /// Write a VTK unstructured-grid file for a scalar solution: component 0 of
 /// `solution` as `SOLUTION` (a [`VtkWriter`] built for this one file).
-pub fn write<W: Write>(writer: &mut W, fe_space: &TetriXP2Space, solution: &[f64]) -> io::Result<()> {
+pub fn write<W: Write>(writer: &mut W, fe_space: &P2PlusSpace, solution: &[f64]) -> io::Result<()> {
     VtkWriter::new(fe_space).write_solution_to(writer, solution)
 }
 
 /// Convenience wrapper that opens a file and calls `write`.
-pub fn write_vtk(file_path: &str, fe_space: &TetriXP2Space, solution: &[f64]) {
+pub fn write_vtk(file_path: &str, fe_space: &P2PlusSpace, solution: &[f64]) {
     let file = std::fs::File::create(file_path)
         .unwrap_or_else(|e| panic!("Cannot create {}: {}", file_path, e));
     let mut buf = std::io::BufWriter::new(file);

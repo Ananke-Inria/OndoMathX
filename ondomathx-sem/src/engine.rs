@@ -25,9 +25,9 @@
 
 use nalgebra::{SMatrix, SVector};
 
-use crate::element::mlt_add_element_batched;
+use crate::element::operator::mlt_add_element_batched;
 use crate::mixed::Pointwise;
-use crate::shape::Shape;
+use crate::element::shape::Shape;
 use crate::space::Space;
 
 /// Input of a point kernel. Fields whose `USES_*` flag is false are zero.
@@ -44,6 +44,23 @@ pub struct PointIn<const D: usize, const C: usize> {
     /// Duplicated node index `e·NLOC + node` (`USES_DOF`), e.g. to read
     /// one-value-per-node data.
     pub dof: usize,
+}
+
+/// The point of a parameter field (`ondomathx_toolbox::field`): `xyz`,
+/// `label`, and the duplicated node index `dof` as the field's index.
+impl<const D: usize, const C: usize> ondomathx_toolbox::field::Point for PointIn<D, C> {
+    #[inline]
+    fn xyz(&self) -> &[f64] {
+        self.xyz.as_slice()
+    }
+    #[inline]
+    fn label(&self) -> usize {
+        self.label
+    }
+    #[inline]
+    fn index(&self) -> usize {
+        self.dof
+    }
 }
 
 impl<const D: usize, const C: usize> PointIn<D, C> {

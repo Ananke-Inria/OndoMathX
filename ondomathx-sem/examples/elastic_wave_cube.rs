@@ -19,15 +19,16 @@ use std::time::Instant;
 
 use ondomathx_mesh::mesh::cube::Cube;
 use ondomathx_mesh::mesh::Mesh;
-use ondomathx_sem::fields::Constant;
+use ondomathx_toolbox::field::Constant;
 use ondomathx_sem::kernels::IsotropicElastic;
 use ondomathx_sem::{Iso3, Numbering, Space, VizirWriter, VtkField, VtkWriter};
 
+use ondomathx_toolbox::io_vizir::write_sols;
 use ondomathx_toolbox::signals::{bump, ricker};
 
 fn main() {
     // 1. The mesh: [0, 1]³ cut into 12 × 12 × 12 hexahedra (`ondomathx-mesh`).
-    let mesh = Cube::new([0.0, 0.0, 0.0], 1.0, 1.0, 1.0, 12, 12, 12, None, None);
+    let mesh = Cube::new([0.0, 0.0, 0.0], 1.0, 1.0, 1.0,24, 24, 24, None, None);
 
     // 2. The space: Gauss–Lobatto elements of order 4 (5 points per direction),
     //    continuous across the elements. The displacement has 3 components.
@@ -121,4 +122,12 @@ fn main() {
         1e3 * elapsed / steps as f64,
         dir.display()
     );
+
+    // 9. Vizir: the time series (`.sols`) and the command that opens it.
+    let sols: Vec<String> = (0..n_out).map(|k| format!("elastic_wave_cube.{k:05}.sol")).collect();
+    write_sols(dir.join("elastic_wave_cube.sols"), &sols).unwrap();
+    // Vizir adds the solution on the boundary faces (the .sol files hold the
+    // volume elements only; `Checksurf`, user guide 7.10).
+    std::fs::write(dir.join("default.vizir"), "Checksurf\n1\n").unwrap();
+    println!("cd {} && vizir4 -in elastic_wave_cube.mesh -sol elastic_wave_cube.00000.sol -sols elastic_wave_cube.sols", dir.display());
 }

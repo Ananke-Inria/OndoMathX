@@ -4,7 +4,7 @@
 mod common;
 
 use common::*;
-use ondomathx_sem::fields::{Constant, PerLabel};
+use ondomathx_toolbox::field::{Constant, PerLabel};
 use ondomathx_sem::kernels::{IsotropicElastic, Mass};
 use ondomathx_sem::{Iso2, Iso3, Numbering, Space};
 
@@ -100,7 +100,7 @@ fn max_eigenvalue_panics_without_numbering() {
 #[test]
 fn inverse_mass_is_local_and_c_inverse_mass_is_assembled() {
     let mesh = square(3, 2, true, Some(bending_2d()));
-    let rho = PerLabel(vec![1.5; 8]);
+    let rho = PerLabel(vec![Some(1.5); 8]);
     for numbering in [Numbering::None, Numbering::Continuous] {
         let s = Space::<2, Iso2<4>>::new(&mesh, numbering);
         let m = s.local_mass(&rho);

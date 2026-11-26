@@ -28,7 +28,7 @@ use std::path::Path;
 use ondomathx_mesh::mesh::Mesh;
 use ondomathx_toolbox::io_vizir::HoSolution;
 
-use crate::shape::Shape;
+use crate::element::shape::Shape;
 use crate::space::Space;
 
 /// Writer of Vizir `.sol` files for one space (the format:

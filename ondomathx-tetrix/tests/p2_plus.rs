@@ -1,8 +1,9 @@
 //! The P2 space's DG operations on the 6-tetrahedron unit cube
 //! (`ondomathx-mesh/assets/Cube.mesh`).
 
+use ondomathx_toolbox::field::Constant;
 use ondomathx_mesh::mesh::UnstructuredMesh;
-use ondomathx_tetrix::tetrix_p2_space::TetriXP2Space;
+use ondomathx_tetrix::space::p2_plus::P2PlusSpace;
 
 fn cube() -> UnstructuredMesh {
     UnstructuredMesh::new_from_mesh(concat!(env!("CARGO_MANIFEST_DIR"), "/../ondomathx-mesh/assets/Cube.mesh"))
@@ -13,14 +14,14 @@ fn cube() -> UnstructuredMesh {
 #[test]
 fn mlt_add_stiffness_dg_accumulates() {
     let mesh = cube();
-    let space = TetriXP2Space::new(&mesh);
+    let space = P2PlusSpace::new(&mesh);
     let n = space.num_dg_dofs();
     let u: Vec<f64> = (0..n).map(|k| ((k as f64) * 0.31).sin()).collect();
     let v0: Vec<f64> = (0..n).map(|k| ((k as f64) * 0.17).cos()).collect();
     let mut ku = vec![f64::NAN; n];
-    space.mlt_stiffness_dg(&u, &mut ku, 2.0);
+    space.mlt_stiffness_dg(&Constant(1.0), &u, &mut ku, 2.0);
     let mut v = v0.clone();
-    space.mlt_add_stiffness_dg(&u, &mut v, 2.0);
+    space.mlt_add_stiffness_dg(&Constant(1.0), &u, &mut v, 2.0);
     let expected: Vec<f64> = v0.iter().zip(&ku).map(|(a, b)| a + b).collect();
     assert_eq!(v, expected);
 }
@@ -30,7 +31,7 @@ fn mlt_add_stiffness_dg_accumulates() {
 #[test]
 fn sample_is_the_scatter_of_the_dof_values() {
     let mesh = cube();
-    let space = TetriXP2Space::new(&mesh);
+    let space = P2PlusSpace::new(&mesh);
     let (n_dof, n_loc, n_elem) = (space.num_dofs(), space.num_loc_dofs(), space.num_elements());
     let f = |x: [f64; 3]| [x[0] + 2.0 * x[1], x[2] * x[2]];
     let v = space.sample::<2>(f);
@@ -52,9 +53,9 @@ fn sample_is_the_scatter_of_the_dof_values() {
 /// `SOLUTION` of component 0.
 #[test]
 fn vtk_writer_fields_and_the_solution_wrapper() {
-    use ondomathx_tetrix::io_vtk::{self, VtkField, VtkWriter};
+    use ondomathx_tetrix::io::io_vtk::{self, VtkField, VtkWriter};
     let mesh = cube();
-    let space = TetriXP2Space::new(&mesh);
+    let space = P2PlusSpace::new(&mesh);
     let n_dof = space.num_dofs();
     let s: Vec<f64> = (0..n_dof).map(|g| g as f64).collect();
     let v: Vec<f64> = (0..3 * n_dof).map(|i| i as f64 * 0.5).collect();
@@ -86,13 +87,13 @@ fn vtk_writer_fields_and_the_solution_wrapper() {
     assert_eq!(wrapped, direct);
 }
 
-/// The Vizir writer: `HOSolAtTetrahedraP1`, one row of 10 nodes × C values
-/// per element.
+/// The Vizir writer: `HOSolAtTetrahedraP1`, one row of 10 nodes per element,
+/// a 2-component field written as a vector.
 #[test]
 fn vizir_writer_rows() {
-    use ondomathx_tetrix::io_vizir::VizirWriter;
+    use ondomathx_tetrix::io::io_vizir::VizirWriter;
     let mesh = cube();
-    let space = TetriXP2Space::new(&mesh);
+    let space = P2PlusSpace::new(&mesh);
     let data: Vec<f64> = (0..2 * space.num_dofs()).map(|i| i as f64).collect();
     let path = std::env::temp_dir().join(format!("tetrix-vizir-{}.sol", std::process::id()));
     let writer = VizirWriter::new(&space, &mesh);
@@ -104,9 +105,30 @@ fn vizir_writer_rows() {
     let i = lines.iter().position(|l| *l == "HOSolAtTetrahedraP1").unwrap();
     assert_eq!(lines[i + 1].parse::<usize>().unwrap(), space.num_elements());
     assert_eq!((lines[i + 2], lines[i + 3]), ("1 2", "2 10"));
+    // Two components: a libMeshb vector (`1 2`), 3 values per node, z = 0.
     let row: Vec<f64> = lines[i + 4].split_whitespace().map(|t| t.parse().unwrap()).collect();
-    assert_eq!(row.len(), 20);
+    assert_eq!(row.len(), 30);
     let g = space.p2_glob2glob(space.p2_loc2glob(0, 0));
-    assert_eq!((row[0], row[1]), (data[2 * g], data[2 * g + 1]));
+    assert_eq!((row[0], row[1], row[2]), (data[2 * g], data[2 * g + 1], 0.0));
     assert_eq!(*lines.last().unwrap(), "End");
+}
+
+/// A constant coefficient field multiplies the stiffness and the mass: `c K`
+/// is `K` scaled by `α = c` (bit for bit), and the density scales the mass.
+#[test]
+fn constant_coefficients_scale_the_operators() {
+    let mesh = cube();
+    let space = P2PlusSpace::new(&mesh);
+    let n = space.num_dg_dofs();
+    let u: Vec<f64> = (0..n).map(|k| ((k as f64) * 0.23).sin()).collect();
+    let (mut a, mut b) = (vec![0.0; n], vec![0.0; n]);
+    space.mlt_stiffness_dg(&Constant(2.5), &u, &mut a, 1.0);
+    space.mlt_stiffness_dg(&Constant(1.0), &u, &mut b, 2.5);
+    assert_eq!(a, b);
+    let (mut m1, mut m3) = (vec![0.0; space.num_dofs()], vec![0.0; space.num_dofs()]);
+    space.assemble_mass(&Constant(1.0), &mut m1, 1.0);
+    space.assemble_mass(&Constant(3.0), &mut m3, 1.0);
+    for (x, y) in m1.iter().zip(&m3) {
+        assert!((3.0 * x - y).abs() <= 1e-15 * y.abs());
+    }
 }

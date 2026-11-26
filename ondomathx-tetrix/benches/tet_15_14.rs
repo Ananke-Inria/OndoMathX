@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use nalgebra::{DMatrix, DVector};
-use ondomathx_tetrix::finite_element::{tet_14, tet_15, tet_15_14};
+use ondomathx_tetrix::element::{tet_14, tet_15, tet_15_14};
 
 /// Build the 42×15 gradient matrix M where M[j*3+d, i] = ∂φ_i/∂x_d(q_j).
 ///

@@ -323,6 +323,61 @@ mod tests {
             .unwrap();
     }
 
+    //Shape measure of a tetrahedron, ‖G‖_F ‖G⁻¹‖_F with G the matrix of its
+    //edges from vertex 0 (scale invariant, 3 for the reference one)
+    fn tet_condition(mesh: &UnstructuredMesh, el: usize) -> f64 {
+        let indexes = &mesh.get_element_as_ref(el).indexes;
+        let p: Vec<[f64; 3]> = indexes[..4].iter().map(|&i| mesh.get_node(i)).collect();
+        let g: [[f64; 3]; 3] = std::array::from_fn(|r| std::array::from_fn(|c| p[c + 1][r] - p[0][r]));
+
+        let det = g[0][0] * (g[1][1] * g[2][2] - g[1][2] * g[2][1])
+            - g[0][1] * (g[1][0] * g[2][2] - g[1][2] * g[2][0])
+            + g[0][2] * (g[1][0] * g[2][1] - g[1][1] * g[2][0]);
+        //Inverse by cofactors: inv[r][c] = cofactor(c, r) / det
+        let inv: [[f64; 3]; 3] = std::array::from_fn(|r| {
+            std::array::from_fn(|c| {
+                (g[(c + 1) % 3][(r + 1) % 3] * g[(c + 2) % 3][(r + 2) % 3]
+                    - g[(c + 1) % 3][(r + 2) % 3] * g[(c + 2) % 3][(r + 1) % 3])
+                    / det
+            })
+        });
+
+        let frobenius = |m: &[[f64; 3]; 3]| m.iter().flatten().map(|x| x * x).sum::<f64>().sqrt();
+        frobenius(&g) * frobenius(&inv)
+    }
+
+    //Repeated Freudenthal-Kuhn refinement keeps the tetrahedra
+    //shape-regular: the children of every refinement fall in the same
+    //finite set of shapes, so the worst shape after the first refinement is
+    //never exceeded (it grew at each level, 5.5 to 44 in four levels of
+    //Cube.mesh, when odd children had corners 2 and 3 swapped)
+    #[test]
+    fn cube_tet_repeated_refinement_is_shape_regular() {
+        for (factor, levels) in [(2, 3), (3, 2)] {
+            let mut mesh = UnstructuredMesh::new_from_mesh("./assets/Cube.mesh").unwrap();
+            let mut first_max = 0.0;
+
+            for level in 1..=levels {
+                mesh = mesh.uniform_refine_by(factor).0;
+
+                let mut max_condition: f64 = 0.0;
+                for &el in mesh.get_elements_by_dimension(3).iter() {
+                    assert!(tet_signed_volume(&mesh, el) > 0.0);
+                    max_condition = max_condition.max(tet_condition(&mesh, el));
+                }
+
+                if level == 1 {
+                    first_max = max_condition;
+                } else {
+                    assert!(
+                        max_condition <= first_max * (1.0 + 1e-9),
+                        "factor {factor}, level {level}: worst shape {max_condition} > {first_max} after one refinement"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn hexahedron_q2_with_boundary_face() {
         //Unit-cube HEXAHEDRON27 built from the canonical internal ordering:

@@ -3,10 +3,10 @@
 //! `cornea/Sources/Utility_Cornea/GradDiv.h`, `MltAddGradDiv`, 2D and 3D) and
 //! the Gauss–Legendre pressure mass of the revised article.
 
-use crate::element::{Batch, ElementOperator};
+use crate::element::operator::{Batch, ElementOperator};
 use crate::geometry::cofactor;
-use crate::quadrature::{Gl, Gll, Quad2, Quad3, Quadrature, Sweep};
-use crate::shape::{Iso2, Iso3, Shape};
+use crate::element::quadrature::{Gl, Gll, Quad2, Quad3, Quadrature, Sweep};
+use crate::element::shape::{Iso2, Iso3, Shape};
 use crate::space::Space;
 
 /// Q2 pressure nodes (GLL 3 points) → Q4 displacement nodes (GLL 5 points).

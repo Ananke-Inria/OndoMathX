@@ -7,9 +7,9 @@ use std::marker::PhantomData;
 use rayon::prelude::*;
 
 use crate::engine::PointIn;
-use crate::fields::Field;
-use crate::quadrature::Sweep;
-use crate::shape::Shape;
+use ondomathx_toolbox::field::Field;
+use crate::element::quadrature::Sweep;
+use crate::element::shape::Shape;
 
 use super::Space;
 
@@ -95,7 +95,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// For `C`-component vectors `a`, `b`, [`Space::mass_inner`]`(m, a, b)` with
     /// this `m` is the GLL mass product `⟨a, b⟩_M` of the discontinuous space,
     /// and of the continuous space when `a`, `b` are continuous; no assembly.
-    pub fn local_mass(&self, coef: &impl Field<D>) -> Vec<f64> {
+    pub fn local_mass(&self, coef: &impl Field<f64>) -> Vec<f64> {
         let nloc = Self::NLOC;
         let mut m = vec![0.0; self.num_dg_dofs()];
         m.par_chunks_mut(nloc).enumerate().for_each(|(e, block)| {
@@ -164,17 +164,17 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     /// numbering; see [`Space::inverse_mass`] for the continuous mass.
     ///
     /// Panics if a mass coefficient is not positive.
-    pub fn inverse_mass_dg(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
+    pub fn inverse_mass_dg(&self, coef: &impl Field<f64>) -> InverseMass<D, S> {
         InverseMass::from_mass(self.local_mass(coef))
     }
 
     /// Inverse of the assembled lumped mass `Σ_shared c · w · |det J|` of the
     /// continuous space (equal across the copies of a node, shared by all
-    /// components): `ρ` for elastodynamics, `Inverse(κ)` for acoustics.
+    /// components): `ρ` for elastodynamics, `1/κ` for acoustics.
     ///
     /// Panics if a mass coefficient is not positive, or without the continuous
     /// numbering.
-    pub fn inverse_mass(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
+    pub fn inverse_mass(&self, coef: &impl Field<f64>) -> InverseMass<D, S> {
         let mut m = self.local_mass(coef);
         self.sum_shared::<1>(&mut m);
         InverseMass::from_mass(m)
@@ -191,7 +191,7 @@ impl<const D: usize, S: Shape<D>> Space<D, S> {
     ///
     /// Panics if `Q` is neither declared nor the node rule, if its counts
     /// differ from the space's, or on a non-positive `c·w·|det J|`.
-    pub fn inverse_mass_with_dg<Q: Sweep<D, S>>(&self, coef: &impl Field<D>) -> InverseMass<D, S> {
+    pub fn inverse_mass_with_dg<Q: Sweep<D, S>>(&self, coef: &impl Field<f64>) -> InverseMass<D, S> {
         assert!(
             (0..D).all(|d| Q::M[d] == S::N[d]),
             "inverse_mass_with_dg: {} must have the space's counts {:?} per direction",

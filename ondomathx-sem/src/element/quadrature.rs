@@ -18,7 +18,7 @@ use lobatto::collocation::Gauss;
 use lobatto::collocation_hc::*;
 use lobatto::tables::{derivative_matrix, interpolation_matrix};
 
-use crate::shape::{Gll2, Gll3, Shape};
+use crate::element::shape::{Gll2, Gll3, Shape};
 
 /// Point family of a 1D rule.
 pub trait Family: Send + Sync + 'static {

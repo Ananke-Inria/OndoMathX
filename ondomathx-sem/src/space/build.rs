@@ -15,8 +15,8 @@ use crate::geometry::{
     classify, cofactor, det, digits, tensor_permutation, ElementMap, GeoStorage, GeoTab, GroupGeo,
     PointGeo, StoredGeo,
 };
-use crate::quadrature::Sweep;
-use crate::shape::Shape;
+use crate::element::quadrature::Sweep;
+use crate::element::shape::Shape;
 
 use super::{GeoKind, GroupRanges, Numbering, Space};
 

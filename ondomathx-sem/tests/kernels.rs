@@ -2,7 +2,7 @@ mod common;
 
 use ondomathx_mesh::mesh::UnstructuredMesh;
 use common::*;
-use ondomathx_sem::fields::{Constant, Field, Function, Inverse, PerLabel, PointData};
+use ondomathx_toolbox::field::{Constant, Field, Function, PerLabel, PointData};
 use ondomathx_sem::kernels::{AcousticStiffness, IsotropicElastic, Mass};
 use ondomathx_sem::{Iso2, Iso3, Numbering, PointKernel, Shape, Space};
 
@@ -57,27 +57,27 @@ fn rho_fn(p: &[f64], x: &[f64]) -> f64 {
 #[test]
 fn field_flags_follow_the_regularity() {
     type K<R> = AcousticStiffness<R>;
-    const { assert!(!<K<Constant> as PointKernel<2, 1>>::USES_XYZ) };
-    const { assert!(!<K<Constant> as PointKernel<2, 1>>::USES_LABEL) };
-    const { assert!(!<K<Constant> as PointKernel<2, 1>>::USES_DOF) };
-    const { assert!(<K<Function> as PointKernel<2, 1>>::USES_XYZ) };
-    const { assert!(<K<PerLabel> as PointKernel<2, 1>>::USES_LABEL) };
-    const { assert!(<K<PointData> as PointKernel<2, 1>>::USES_DOF) };
-    const { assert!(<K<Inverse<Function>> as PointKernel<2, 1>>::USES_XYZ) };
-    type E = IsotropicElastic<Constant, PerLabel>;
+    type Rho = Function<fn(&[f64]) -> f64>;
+    const { assert!(!<K<Constant<f64>> as PointKernel<2, 1>>::USES_XYZ) };
+    const { assert!(!<K<Constant<f64>> as PointKernel<2, 1>>::USES_LABEL) };
+    const { assert!(!<K<Constant<f64>> as PointKernel<2, 1>>::USES_DOF) };
+    const { assert!(<K<Rho> as PointKernel<2, 1>>::USES_XYZ) };
+    const { assert!(<K<PerLabel<f64>> as PointKernel<2, 1>>::USES_LABEL) };
+    const { assert!(<K<PointData<f64>> as PointKernel<2, 1>>::USES_DOF) };
+    type E = IsotropicElastic<Constant<f64>, PerLabel<f64>>;
     const { assert!(<E as PointKernel<3, 3>>::USES_LABEL) };
     const { assert!(!<E as PointKernel<3, 3>>::USES_XYZ) };
-    const { assert!(!<Mass<Constant> as PointKernel<2, 2>>::USES_GRAD) };
-    const { assert!(!<Mass<Constant> as PointKernel<2, 2>>::OUTPUTS_FLUX) };
-    const { assert!(<Function as Field<2>>::NEEDS_XYZ && !<Function as Field<2>>::NEEDS_DOF) };
+    const { assert!(!<Mass<Constant<f64>> as PointKernel<2, 2>>::USES_GRAD) };
+    const { assert!(!<Mass<Constant<f64>> as PointKernel<2, 2>>::OUTPUTS_FLUX) };
+    const { assert!(<Rho as Field<f64>>::NEEDS_XYZ && !<Rho as Field<f64>>::NEEDS_INDEX) };
 }
 
 #[test]
 fn per_label_from_pairs() {
     let t = PerLabel::from_pairs(&[(1, 2.0), (3, 5.0)]);
     assert_eq!(t.0.len(), 4);
-    assert!(t.0[0].is_nan() && t.0[2].is_nan());
-    assert_eq!((t.0[1], t.0[3]), (2.0, 5.0));
+    assert!(t.0[0].is_none() && t.0[2].is_none());
+    assert_eq!((t.0[1], t.0[3]), (Some(2.0), Some(5.0)));
 }
 
 /// `Function` (evaluated on the fly at the engine's points) and `PointData`
@@ -86,14 +86,11 @@ fn per_label_from_pairs() {
 fn function_and_point_data_agree() {
     let mesh = square(4, 3, true, Some(bending_2d()));
     let space = Space::<2, Iso2<5>>::new(&mesh, Numbering::Continuous);
-    let f = Function {
-        f: rho_fn,
-        params: vec![1.0, 0.5],
-    };
-    let pd = PointData::sample(&space, |x| rho_fn(&[1.0, 0.5], &x));
+    let f = Function(|x: &[f64]| rho_fn(&[1.0, 0.5], x));
+    let pd = PointData(space.sample::<1>(|x| [rho_fn(&[1.0, 0.5], &x)]));
     let u = space.sample::<1>(|x| [x[0].sin() * x[1]]);
     assert_close(
-        &apply(&space, &AcousticStiffness { rho: f.clone() }, &u),
+        &apply(&space, &AcousticStiffness { rho: f }, &u),
         &apply(&space, &AcousticStiffness { rho: pd.clone() }, &u),
         1e-13,
         "acoustic stiffness",
@@ -124,12 +121,12 @@ fn inverse_mass_with_fields() {
         .to_vec();
     // Acoustic mass coefficient 1/κ: inverse mass scales by κ.
     let inv_kappa = space
-        .inverse_mass(&Inverse(Constant(4.0)))
+        .inverse_mass(&Constant(1.0 / 4.0))
         .diagonal()
         .unwrap()
         .to_vec();
     let expected: Vec<f64> = one.iter().map(|x| 4.0 * x).collect();
-    assert_close(&inv_kappa, &expected, 1e-14, "Inverse(κ)");
+    assert_close(&inv_kappa, &expected, 1e-14, "1/κ");
     // Mass kernel assembled = 1 / inverse_mass_dg, for a per-label coefficient.
     let rho = PerLabel::from_pairs(&[(1, 1.0), (2, 3.0)]);
     let mut m = apply::<2, Iso2<4>, 1, _>(
@@ -180,10 +177,7 @@ fn acoustic_stiffness_kills_constants_and_is_symmetric() {
     let mesh = two_materials(cube([2, 2, 2], true, Some(bending_3d())), 0.5);
     let space = Space::<3, Iso3<4>>::new(&mesh, Numbering::Continuous);
     let k = AcousticStiffness {
-        rho: Function {
-            f: rho_fn,
-            params: vec![2.0, 1.0],
-        },
+        rho: Function(|x: &[f64]| rho_fn(&[2.0, 1.0], x)),
     };
     let a1 = apply(&space, &k, &vec![1.0; space.num_dg_dofs()]);
     assert!(a1.iter().all(|x| x.abs() < 1e-11));

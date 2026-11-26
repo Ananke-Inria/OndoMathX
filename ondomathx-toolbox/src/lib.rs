@@ -2,6 +2,9 @@
 //! `ondomathx-sem`): code that does not depend on a particular
 //! finite-element space.
 //!
+//! * [`field`]   — parameter fields: scalar, vector and matrix coefficients
+//!   of every regularity (constant, per label, function of the coordinates,
+//!   of the coordinates and the label, per point).
 //! * [`lal`]     — linear algebra on plain vectors: reproducible dot
 //!   products and norms, the power iteration for the spectral radius of
 //!   `M⁻¹K`, the fused update `axpby_diag` of explicit schemes.
@@ -15,6 +18,7 @@
 //! Tools that need meshes go behind the `mesh` feature, so that
 //! `ondomathx-mesh` stays independent of this crate.
 
+pub mod field;
 pub mod io_vizir;
 pub mod io_vtk;
 pub mod lal;

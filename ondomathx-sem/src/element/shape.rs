@@ -18,7 +18,7 @@
 use lobatto::collocation::Gauss;
 use lobatto::tables::points_weights;
 
-use crate::quadrature::{Gll, Quad2, Quad3, Sweep};
+use crate::element::quadrature::{Gll, Quad2, Quad3, Sweep};
 
 /// GLL point counts per direction of a space (`N[d] ≥ 2` for `d < D`).
 pub trait Shape<const D: usize>: Sized + Send + Sync + 'static {
